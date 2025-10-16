@@ -1,0 +1,71 @@
+# Model files in models/ directory
+models/**/*.pt
+models/**/*.pth
+models/**/*.bin
+models/**/*.safetensors
+models/**/*.ckpt
+models/**/*.h5
+models/**/*.pkl
+models/**/*.pickle
+models/**/*.onnx
+
+# Datasets
+datasets/
+
+# Scorer models (in scorers/ subdirectories)
+scorers/**/*.pt
+scorers/**/*.pth
+scorers/**/*.bin
+scorers/**/*.safetensors
+scorers/**/*.ckpt
+scorers/**/*.h5
+scorers/**/*.pkl
+scorers/**/*.pickle
+scorers/**/*.onnx
+
+# Training artifacts
+training.log
+wandb/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# OS
+.DS_Store
+Thumbs.db
