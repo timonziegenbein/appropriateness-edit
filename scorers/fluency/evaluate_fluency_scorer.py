@@ -464,6 +464,7 @@ class ModernBERTFluencyModel(weave.Model):
         return _SCORER_CACHE[self._model_cache_key]
 
     @weave.op()
+    @torch._dynamo.disable()
     def predict(self, original_sentence: str, inappropriate_part: str, rewritten_part: str) -> Dict[str, Any]:
         """
         Score the fluency of an edit using ModernBERT.
@@ -767,7 +768,7 @@ Now, evaluate the following input:
                     }
 
 
-class FluencyAccuracyScorer(weave.Scorer):
+class AccuracyScorer(weave.Scorer):
     """
     Scorer that evaluates whether the fluency prediction matches the expected score.
     Since fluency scores are binary (0.0 or 1.0), this checks exact match accuracy.
@@ -792,136 +793,83 @@ class FluencyAccuracyScorer(weave.Scorer):
             "correct": is_correct
         }
 
-
-class FluencyPrecisionScorer(weave.Scorer):
-    """
-    Scorer that calculates precision for fluency predictions.
-    Treats fluent (1.0) as the positive class.
-    Precision = TP / (TP + FP)
-    """
-
-    true_positives: int = 0
-    false_positives: int = 0
-
+class PrecisionScorer(weave.Scorer):
     @weave.op()
     def score(self, expected_score: float, model_output: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Calculate precision for fluency predictions.
-
-        Args:
-            expected_score: The expected fluency score (0.0 or 1.0)
-            model_output: Dictionary containing the model's prediction with 'fluency_score' key
-
-        Returns:
-            Dictionary with precision metric
-        """
         predicted_score = model_output["fluency_score"]
+        true_positive = bool(expected_score and predicted_score)
+        false_positive = bool(predicted_score and not expected_score)  # Fixed: FP = predicted 1 but expected 0
+        return {
+            "true_positive": true_positive,
+            "false_positive": false_positive
+        }
 
-        # Treat 1.0 (fluent) as positive class
-        predicted_positive = predicted_score == 1.0
-        actual_positive = expected_score == 1.0
+    @weave.op()
+    def summarize(self, score_rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+        total_true_positive = sum(score["true_positive"] for score in score_rows)
+        total_false_positive = sum(score["false_positive"] for score in score_rows)
+        denominator = total_true_positive + total_false_positive
+        precision = total_true_positive / denominator if denominator > 0 else 0
+        return {"precision": precision}
 
-        # Update confusion matrix components
-        if predicted_positive and actual_positive:
-            self.true_positives += 1
-        elif predicted_positive and not actual_positive:
-            self.false_positives += 1
+class RecallScorer(weave.Scorer):
+    @weave.op()
+    def score(self, expected_score: float, model_output: Dict[str, Any]) -> Dict[str, Any]:
+        predicted_score = model_output["fluency_score"]
+        true_positive = bool(expected_score and predicted_score)
+        false_negative = bool(expected_score and not predicted_score)  # Fixed: FN = expected 1 but predicted 0
+        return {
+            "true_positive": true_positive,
+            "false_negative": false_negative
+        }
+
+    @weave.op()
+    def summarize(self, score_rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+        total_true_positive = sum(score["true_positive"] for score in score_rows)
+        total_false_negative = sum(score["false_negative"] for score in score_rows)
+        denominator = total_true_positive + total_false_negative
+        recall = total_true_positive / denominator if denominator > 0 else 0
+        return {"recall": recall}
+
+
+class F1Scorer(weave.Scorer):
+    @weave.op()
+    def score(self, expected_score: float, model_output: Dict[str, Any]) -> Dict[str, Any]:
+        """Compute per-example metrics needed for precision, recall, and F1"""
+        predicted_score = model_output["fluency_score"]
+        true_positive = bool(expected_score and predicted_score)
+        false_positive = bool(predicted_score and not expected_score)
+        false_negative = bool(expected_score and not predicted_score)
+        return {
+            "true_positive": true_positive,
+            "false_positive": false_positive,
+            "false_negative": false_negative
+        }
+
+    @weave.op()
+    def summarize(self, score_rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Aggregate metrics and compute precision, recall, and F1"""
+        total_true_positive = sum(score["true_positive"] for score in score_rows)
+        total_false_positive = sum(score["false_positive"] for score in score_rows)
+        total_false_negative = sum(score["false_negative"] for score in score_rows)
 
         # Calculate precision
-        precision = self.true_positives / (self.true_positives + self.false_positives) if (self.true_positives + self.false_positives) > 0 else 0.0
-
-        return {
-            "precision": precision
-        }
-
-
-class FluencyRecallScorer(weave.Scorer):
-    """
-    Scorer that calculates recall for fluency predictions.
-    Treats fluent (1.0) as the positive class.
-    Recall = TP / (TP + FN)
-    """
-
-    true_positives: int = 0
-    false_negatives: int = 0
-
-    @weave.op()
-    def score(self, expected_score: float, model_output: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Calculate recall for fluency predictions.
-
-        Args:
-            expected_score: The expected fluency score (0.0 or 1.0)
-            model_output: Dictionary containing the model's prediction with 'fluency_score' key
-
-        Returns:
-            Dictionary with recall metric
-        """
-        predicted_score = model_output["fluency_score"]
-
-        # Treat 1.0 (fluent) as positive class
-        predicted_positive = predicted_score == 1.0
-        actual_positive = expected_score == 1.0
-
-        # Update confusion matrix components
-        if predicted_positive and actual_positive:
-            self.true_positives += 1
-        elif not predicted_positive and actual_positive:
-            self.false_negatives += 1
+        precision_denominator = total_true_positive + total_false_positive
+        precision = total_true_positive / precision_denominator if precision_denominator > 0 else 0
 
         # Calculate recall
-        recall = self.true_positives / (self.true_positives + self.false_negatives) if (self.true_positives + self.false_negatives) > 0 else 0.0
-
-        return {
-            "recall": recall
-        }
-
-
-class FluencyF1Scorer(weave.Scorer):
-    """
-    Scorer that calculates F1 score for fluency predictions.
-    Treats fluent (1.0) as the positive class.
-    F1 = 2 * (Precision * Recall) / (Precision + Recall)
-    """
-
-    true_positives: int = 0
-    false_positives: int = 0
-    false_negatives: int = 0
-
-    @weave.op()
-    def score(self, expected_score: float, model_output: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Calculate F1 score for fluency predictions.
-
-        Args:
-            expected_score: The expected fluency score (0.0 or 1.0)
-            model_output: Dictionary containing the model's prediction with 'fluency_score' key
-
-        Returns:
-            Dictionary with F1 metric
-        """
-        predicted_score = model_output["fluency_score"]
-
-        # Treat 1.0 (fluent) as positive class
-        predicted_positive = predicted_score == 1.0
-        actual_positive = expected_score == 1.0
-
-        # Update confusion matrix components
-        if predicted_positive and actual_positive:
-            self.true_positives += 1
-        elif predicted_positive and not actual_positive:
-            self.false_positives += 1
-        elif not predicted_positive and actual_positive:
-            self.false_negatives += 1
-
-        # Calculate precision and recall
-        precision = self.true_positives / (self.true_positives + self.false_positives) if (self.true_positives + self.false_positives) > 0 else 0.0
-        recall = self.true_positives / (self.true_positives + self.false_negatives) if (self.true_positives + self.false_negatives) > 0 else 0.0
+        recall_denominator = total_true_positive + total_false_negative
+        recall = total_true_positive / recall_denominator if recall_denominator > 0 else 0
 
         # Calculate F1
-        f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
+        if precision + recall == 0:
+            f1 = 0
+        else:
+            f1 = 2 * (precision * recall) / (precision + recall)
 
         return {
+            "precision": precision,
+            "recall": recall,
             "f1": f1
         }
 
@@ -948,57 +896,6 @@ def create_evaluation_dataset(test_cases: List[Dict[str, Any]], dataset_name: st
 
     logger.info(f"Created Weave dataset '{dataset_name}' with {len(examples)} test cases")
     return dataset
-
-
-def load_real_world_examples(max_examples: int = 50) -> List[Dict[str, Any]]:
-    """
-    Load real-world examples from the fluency dataset for additional testing.
-
-    Args:
-        max_examples: Maximum number of examples to load
-
-    Returns:
-        List of test cases from the real dataset
-    """
-    try:
-        # Load the binary fluency dataset
-        dataset = load_dataset("timonziegenbein/binary-fluency-data", split="test")
-
-        real_world_cases = []
-
-        for idx, example in enumerate(dataset):
-            if len(real_world_cases) >= max_examples:
-                break
-
-            # Create a synthetic edit scenario from the dataset
-            # For fluent examples (label=1), use the text as the rewritten part
-            # For non-fluent examples (label=0), use the text as the original
-
-            if example["label"] == 1:
-                test_case = {
-                    "original_sentence": "This is a placeholder sentence for testing.",
-                    "inappropriate_part": "placeholder sentence",
-                    "rewritten_part": example["text"],
-                    "expected_score": 1.0,
-                    "description": f"Real-world fluent text from dataset (id: {idx})"
-                }
-            else:
-                test_case = {
-                    "original_sentence": example["text"],
-                    "inappropriate_part": example["text"].split()[0] if example["text"].split() else "test",
-                    "rewritten_part": "corrected",
-                    "expected_score": 0.0,
-                    "description": f"Real-world non-fluent text from dataset (id: {idx})"
-                }
-
-            real_world_cases.append(test_case)
-
-        logger.info(f"Loaded {len(real_world_cases)} real-world test cases")
-        return real_world_cases
-
-    except Exception as e:
-        logger.warning(f"Could not load real-world examples: {e}")
-        return []
 
 
 async def run_evaluation_async(args):
@@ -1034,10 +931,6 @@ async def run_evaluation_async(args):
     else:
         # Use default test cases
         all_test_cases = FLUENCY_TEST_CASES.copy()
-
-        if args.include_real_examples:
-            real_examples = load_real_world_examples(args.max_real_examples)
-            all_test_cases.extend(real_examples)
 
     # Create evaluation dataset
     dataset = create_evaluation_dataset(all_test_cases, "fluency_test_cases")
@@ -1129,24 +1022,28 @@ async def run_evaluation_async(args):
     evaluation = weave.Evaluation(
         dataset=dataset,
         scorers=[
-            FluencyAccuracyScorer(),
-            FluencyPrecisionScorer(),
-            FluencyRecallScorer(),
-            FluencyF1Scorer()
+            AccuracyScorer(),
+            F1Scorer(),
         ],
         name="fluency_scorer_evaluation"
     )
 
     logger.info("Starting evaluation...")
 
-    # Run evaluation (async)
-    results = await evaluation.evaluate(model)
+    # Run evaluation (async) with optional display name
+    if args.run_name:
+        logger.info(f"Evaluation run name: {args.run_name}")
+        results = await evaluation.evaluate(model, __weave={"display_name": args.run_name})
+    else:
+        results = await evaluation.evaluate(model)
 
     # Print summary
     print("\n" + "="*80)
     print("FLUENCY SCORER EVALUATION RESULTS")
     print("="*80)
-    print(f"\nTotal test cases: {len(all_test_cases)}")
+    if args.run_name:
+        print(f"\nRun name: {args.run_name}")
+    print(f"Total test cases: {len(all_test_cases)}")
     print(f"Device used: {args.device}")
 
     # Access the results - handle different result formats
@@ -1188,6 +1085,8 @@ def main():
     parser = argparse.ArgumentParser(description="Evaluate the Fluency Scorer using Weave")
     parser.add_argument("--project", type=str, default="fluency-scorer-eval",
                        help="Weave project name")
+    parser.add_argument("--run-name", type=str, default=None,
+                       help="Display name for this evaluation run (shown in Weave UI)")
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu",
                        help="Device to run the scorer on (only used if --use-llm is not set)")
 
@@ -1198,12 +1097,6 @@ def main():
                        help="Which split of the evaluation dataset to use (default: test)")
     parser.add_argument("--max-eval-examples", type=int, default=100,
                        help="Maximum number of examples to load from eval dataset (default: 1000 for efficiency)")
-
-    # Legacy options (used when --eval-dataset-name is not specified)
-    parser.add_argument("--include-real-examples", action="store_true",
-                       help="Include real-world examples from the dataset (legacy option)")
-    parser.add_argument("--max-real-examples", type=int, default=50,
-                       help="Maximum number of real-world examples to include (legacy option)")
 
     # Model options (mutually exclusive)
     # Baseline models
