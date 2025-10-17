@@ -23,6 +23,10 @@ scorers/**/*.pkl
 scorers/**/*.pickle
 scorers/**/*.onnx
 
+# ModernBERT models
+**/moderntbert/
+moderntbert/
+
 # Training artifacts
 training.log
 wandb/
