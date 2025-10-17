@@ -1,0 +1,78 @@
+{
+  "builder_name": "parquet",
+  "citation": "",
+  "config_name": "default",
+  "dataset_name": "fluency-edits-gec-only-extended",
+  "dataset_size": 4573049,
+  "description": "",
+  "download_checksums": {
+    "hf://datasets/timonziegenbein/fluency-edits-gec-only-extended@87ad51614817456f8d04ac95488ca123018143d0/data/train-00000-of-00001.parquet": {
+      "num_bytes": 1400949,
+      "checksum": null
+    },
+    "hf://datasets/timonziegenbein/fluency-edits-gec-only-extended@87ad51614817456f8d04ac95488ca123018143d0/data/validation-00000-of-00001.parquet": {
+      "num_bytes": 202957,
+      "checksum": null
+    },
+    "hf://datasets/timonziegenbein/fluency-edits-gec-only-extended@87ad51614817456f8d04ac95488ca123018143d0/data/test-00000-of-00001.parquet": {
+      "num_bytes": 419524,
+      "checksum": null
+    }
+  },
+  "download_size": 2023430,
+  "features": {
+    "original_sentence": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "inappropriate_part": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "rewritten_part": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "expected_score": {
+      "dtype": "float64",
+      "_type": "Value"
+    },
+    "description": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "source": {
+      "dtype": "string",
+      "_type": "Value"
+    }
+  },
+  "homepage": "",
+  "license": "",
+  "size_in_bytes": 6596479,
+  "splits": {
+    "train": {
+      "name": "train",
+      "num_bytes": 3181479,
+      "num_examples": 12039,
+      "dataset_name": "fluency-edits-gec-only-extended"
+    },
+    "validation": {
+      "name": "validation",
+      "num_bytes": 446277,
+      "num_examples": 1647,
+      "dataset_name": "fluency-edits-gec-only-extended"
+    },
+    "test": {
+      "name": "test",
+      "num_bytes": 945293,
+      "num_examples": 3637,
+      "dataset_name": "fluency-edits-gec-only-extended"
+    }
+  },
+  "version": {
+    "version_str": "0.0.0",
+    "major": 0,
+    "minor": 0,
+    "patch": 0
+  }
+}

@@ -1095,7 +1095,7 @@ def main():
                        help="Name of the evaluation dataset on HuggingFace Hub (created by create_fluency_eval_dataset.py)")
     parser.add_argument("--eval-dataset-split", type=str, default="test",
                        help="Which split of the evaluation dataset to use (default: test)")
-    parser.add_argument("--max-eval-examples", type=int, default=100,
+    parser.add_argument("--max-eval-examples", type=int, default=None,
                        help="Maximum number of examples to load from eval dataset (default: 1000 for efficiency)")
 
     # Model options (mutually exclusive)

@@ -1,0 +1,32 @@
+{
+  "citation": "",
+  "description": "",
+  "features": {
+    "original_sentence": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "inappropriate_part": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "rewritten_part": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "expected_score": {
+      "dtype": "float64",
+      "_type": "Value"
+    },
+    "description": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "source": {
+      "dtype": "string",
+      "_type": "Value"
+    }
+  },
+  "homepage": "",
+  "license": ""
+}
