@@ -25,7 +25,7 @@ class FluencyScorer:
 
         # Default model path - update this to point to your best checkpoint
         if model_path is None:
-            model_path = "/mnt/home/tziegenb/appropriateness-edit/scorers/fluency/modernbert_gec/checkpoint-500"
+            model_path = "/mnt/home/tziegenb/appropriateness-edit/scorers/fluency/modernbert_gec_extended_v2/checkpoint-500"
 
         self.model_path = model_path
         self.model, self.tokenizer = self._load_model(device, model_path)

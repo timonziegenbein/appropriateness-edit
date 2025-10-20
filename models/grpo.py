@@ -11,7 +11,7 @@ import wandb
 import weave
 
 from prompts.edit_inappropriate_text import create_llm_prompt
-from scorers.reward_functions import global_appropriateness_reward
+from scorers.reward_functions import global_appropriateness_reward, dense_local_appropriateness_reward
 from scorers.semantic_similarity.semantic_similarity_scorer import SemanticSimilarityScorer
 from scorers.human_like.human_like_scorer import HumanLikeScorer
 from scorers.fluency.fluency_scorer import FluencyScorer
@@ -131,15 +131,29 @@ def main():
     trainer = GRPOTrainer(
         model=args.model_name,
         reward_funcs=[
-            lambda prompts, completions, **kwargs: global_appropriateness_reward(
-                prompts,
-                completions,
-                appropriateness_scorer=appropriateness_scorer,
-                semantic_similarity_scorer=semantic_similarity_scorer,
-                human_like_scorer=human_like_scorer,
-                fluency_scorer=fluency_scorer,
-                **kwargs
-            )
+            # Global Reward (80% weight) - measures document-level inappropriateness reduction
+            lambda prompts, completions, **kwargs: [
+                0.5 * score for score in global_appropriateness_reward(
+                    prompts,
+                    completions,
+                    appropriateness_scorer=appropriateness_scorer,
+                    semantic_similarity_scorer=semantic_similarity_scorer,
+                    human_like_scorer=human_like_scorer,
+                    fluency_scorer=fluency_scorer,
+                    **kwargs
+                )
+            ],
+            # Dense Local Reward (20% weight) - provides gradient signal for edit quality
+            lambda prompts, completions, **kwargs: [
+                0.5 * score for score in dense_local_appropriateness_reward(
+                    prompts,
+                    completions,
+                    semantic_similarity_scorer=semantic_similarity_scorer,
+                    human_like_scorer=human_like_scorer,
+                    fluency_scorer=fluency_scorer,
+                    **kwargs
+                )
+            ]
         ],
         args=training_args,
         train_dataset=dataset,
