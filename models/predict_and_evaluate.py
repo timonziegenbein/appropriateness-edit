@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 import logging
 import re
@@ -7,6 +8,11 @@ import json_repair
 import spacy
 from typing import List, Dict, Any, Optional
 import argparse
+from pathlib import Path
+
+# Add project root to path
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
 
 import torch
 import torch.nn as nn
@@ -23,11 +29,15 @@ from sentence_transformers import SentenceTransformer, util
 from bert_score import BERTScorer
 from trl import GRPOConfig, GRPOTrainer
 
-from ops.prompt_processor import create_llm_prompt
-from scorers.fluency.fluency_scorer import compute_fluency_scores
-from scorers.appropriateness.appropriateness_scorer import get_appropriateness_scores, load_app_model
+from prompts.edit_inappropriate_text import create_llm_prompt
+from scorers.fluency.fluency_scorer import FluencyScorer
+from scorers.appropriateness.appropriateness_scorer import AppropriatenessScorer
+from scorers.semantic_similarity.semantic_similarity_scorer import SemanticSimilarityScorer
+from scorers.human_like.human_like_scorer import HumanLikeScorer
+from ops.completion_processor import process_completion
+from ops.prompt_processor import process_prompt
+from ops.edit_applier import apply_edits_to_argument
 from ops.latexdiff_parser import DirectLatexdiffParser, fuzzy_post_process_edits
-from scorers.human_like.human_like_scorer import generate_sequence_for_edit, calculate_perplexity_for_sequence
 
 # -----------------------------
 # Logging
@@ -114,32 +124,22 @@ _cuda_available = torch.cuda.is_available()
 _local_rank = int(os.environ.get("LOCAL_RANK", 0)) if _cuda_available else 0
 _device = torch.device(f"cuda:{_local_rank}" if _cuda_available else "cpu")
 
-# Load all reward models
-_ss_model, _app_model, _hl_model, _hl_tokenizer, _fluency_model = load_reward_models(
-    os.path.join(_BASE_DIR, "../models/human_like_language_model_v2.pth"),
-    _device
-)
+# Initialize scorers
+logger.info("Loading scorers...")
+_semantic_similarity_scorer = SemanticSimilarityScorer(_device)
+_human_like_scorer = HumanLikeScorer(_device)  # Uses v4 model and P99 threshold by default
+_fluency_scorer = FluencyScorer(_device)
+_appropriateness_scorer = AppropriatenessScorer(_device)
 
-# Human-like sequence LM
-_hl_device = _device
-_hl_vocab = {'<pad>': 0, 'keep': 1, 'del': 2, 'add': 3, 'replace': 4}
-_hl_max_len = 500
+# BERTScorer for document-level similarity
+_bert_scorer = BERTScorer(model_type="microsoft/deberta-xlarge-mnli", rescale_with_baseline=True, lang="en", batch_size=1, device=_device)
 
-# Perplexity threshold for human-like reward
-_ppl_threshold = 1.4381
-
-# Semantic similarity scorer
-_ss_device = _device
-_bert_scorer = BERTScorer(model_type="microsoft/deberta-xlarge-mnli", rescale_with_baseline=True, lang="en", batch_size=1, device=_ss_device)
-
-
-# Thresholds aligned with guided_grpo.py
-SS_F1_MIN_THRESHOLD = 0.6144470572471619
+# Spacy for sentence segmentation
 nlp = spacy.load("en_core_web_sm")
+
 # -----------------------------
 # Appropriateness classifier for argument-level scores
 # -----------------------------
-_clf_device = 0 if torch.cuda.is_available() else -1
 _DIMS = [
     'Inappropriateness',
     'Toxic Emotions',
@@ -167,11 +167,7 @@ _ANALYSIS_DIMS = [
 
 def _predict_dimension_scores(text: str) -> Dict[str, float]:
     try:
-        outputs = _app_model(text)
-        # outputs is List[List[{label,score}]] when return_all_scores=True
-        if isinstance(outputs, list) and len(outputs) > 0 and isinstance(outputs[0], list):
-            scores = { _LABEL_MAP.get(item["label"], item["label"]): float(item["score"]) for item in outputs[0] }
-            return scores
+        return _appropriateness_scorer.get_appropriateness_scores(text)
     except Exception as e:
         logger.debug(f"Classifier prediction failed: {e}")
     return {}
@@ -213,7 +209,7 @@ def _normalized_edit_similarity_words(before: str, after: str) -> float:
 # -----------------------------
 # Reward computation per edit
 # -----------------------------
-def score_edit(original_argument: str, edit: Dict[str, Any], baseline_scores: Dict[str, float] | None = None, original_sentence_context: Optional[str] = None, app_model=None) -> Dict[str, Any]:
+def score_edit(original_argument: str, edit: Dict[str, Any], baseline_scores: Dict[str, float] | None = None, original_sentence_context: Optional[str] = None) -> Dict[str, Any]:
     reason = edit.get("reason")
     inappropriate_part = edit.get("inappropriate_part")
     rewritten_part = edit.get("rewritten_part")
@@ -231,48 +227,32 @@ def score_edit(original_argument: str, edit: Dict[str, Any], baseline_scores: Di
 
     if is_well_formed:
         # Semantic similarity
-        semantic_similarity, ss_score = calculate_semantic_similarity(edit_context, inappropriate_part, rewritten_part, _ss_model, SS_F1_MIN_THRESHOLD)
+        try:
+            semantic_similarity, ss_score = _semantic_similarity_scorer.calculate_semantic_similarity(
+                original_argument, inappropriate_part, rewritten_part
+            )
+            logger.info(f"Semantic similarity: binary={semantic_similarity}, score={ss_score}")
+        except Exception as e:
+            semantic_similarity = 0.0
+            logger.error(f"Semantic similarity check failed: {e}")
 
-        # Fluency change
+        # Fluency
         try:
             context = original_sentence_context if original_sentence_context is not None else original_argument
-            scores = compute_fluency_scores(context, inappropriate_part, rewritten_part)
-            if scores and len(scores) > 0:
-                fluency_score = scores[0]
+            fluency_score = _fluency_scorer.calculate_fluency(context, inappropriate_part, rewritten_part)
             logger.info(f"Fluency Input: context='{context}', inappropriate_part='{inappropriate_part}', rewritten_part='{rewritten_part}'")
             logger.info(f"Fluency Output: {fluency_score}")
-
         except Exception as e:
             fluency_score = 0.0
             logger.error(f"Fluency check failed: {e}")
 
-        # Human-like sequence plausibility
+        # Human-like
         try:
-            start_char = -1
-            if original_sentence_context:
-                # Find inappropriate_part within the sentence to handle duplicates in the argument
-                start_char_in_sentence = original_sentence_context.find(inappropriate_part)
-                if start_char_in_sentence != -1:
-                    # Find where the sentence starts in the full argument
-                    sentence_start_in_argument = original_argument.find(original_sentence_context)
-                    if sentence_start_in_argument != -1:
-                        start_char = sentence_start_in_argument + start_char_in_sentence
-                    else:
-                        # This should not happen if original_sentence_context is from original_argument
-                        # Fallback to searching in the whole argument
-                        start_char = original_argument.find(inappropriate_part)
-            else:
-                # Fallback for when there is no sentence context
-                start_char = original_argument.find(inappropriate_part)
-
-            if start_char != -1:
-                end_char = start_char + len(inappropriate_part)
-                sequence = generate_sequence_for_edit(original_argument, start_char, end_char, rewritten_part, _hl_tokenizer)
-                if sequence:
-                    ppl = calculate_perplexity_for_sequence(sequence, _hl_model, _hl_vocab, _hl_device, _hl_max_len)
-                    human_like = 1.0 if ppl <= _ppl_threshold else 0.0
-                    logger.info(f"Human-like Input: sequence='{sequence}'")
-                    logger.info(f"Human-like Output: ppl={ppl}, human_like={human_like}")
+            context = original_sentence_context if original_sentence_context is not None else original_argument
+            human_like = _human_like_scorer.calculate_human_likeness(
+                original_argument, context, inappropriate_part, rewritten_part
+            )
+            logger.info(f"Human-like score: {human_like}")
         except Exception as e:
             human_like = 0.0
             logger.error(f"Human-like check failed: {e}")
@@ -284,8 +264,8 @@ def score_edit(original_argument: str, edit: Dict[str, Any], baseline_scores: Di
                 modified_argument = original_argument.replace(original_sentence_context, modified_sentence, 1)
             else:
                 modified_argument = original_argument.replace(inappropriate_part, rewritten_part, 1)
-            before_scores = baseline_scores if baseline_scores is not None else get_appropriateness_scores(original_argument, app_model)
-            after_scores = get_appropriateness_scores(modified_argument, app_model)
+            before_scores = baseline_scores if baseline_scores is not None else _appropriateness_scorer.get_appropriateness_scores(original_argument)
+            after_scores = _appropriateness_scorer.get_appropriateness_scores(modified_argument)
             dim_name = reason if isinstance(reason, str) else None
             dim_before = before_scores.get("Inappropriateness")
             dim_after = after_scores.get("Inappropriateness")
@@ -388,8 +368,6 @@ def main(checkpoint_root: str, output_jsonl: str, use_base_model_only: bool = Fa
         trainer, tokenizer = load_generation_model(checkpoint_root, use_base_model_only)
         logger.info(f"Loaded generation model and tokenizer in {time.time() - model_load_start:.1f}s")
 
-    app_model = load_app_model(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
-
     eval_dataset = load_dataset("timonziegenbein/appropriateness-corpus", split="validation")
     eval_dataset = eval_dataset.filter(lambda x: float(x.get("Inappropriateness", 0.0)) >= 0.5)
 
@@ -404,8 +382,8 @@ def main(checkpoint_root: str, output_jsonl: str, use_base_model_only: bool = Fa
 
     total_before_filter = len(eval_dataset)
     # Limit to 1 sample for debugging purposes
-    limited_n = min(1, len(eval_dataset))
-    eval_dataset = eval_dataset.select(range(limited_n))
+    #limited_n = min(1, len(eval_dataset))
+    #eval_dataset = eval_dataset.select(range(limited_n))
     num_examples = len(eval_dataset)
     logger.info(f"Loaded validation dataset: {total_before_filter} examples; filtered to inappropriate and limited: {num_examples}")
 
@@ -473,55 +451,54 @@ def main(checkpoint_root: str, output_jsonl: str, use_base_model_only: bool = Fa
                 )
                 logger.info(f"Model completion: {completion}")
 
-            # Parse JSON edits
-            edits_list: List[Dict[str, Any]] = []
+            # Parse completion using ops (same as GRPO)
             scored_edits = []
-            rewritten_argument = ""
             parse_ok = False
-            data = {}
+            all_edits = []
+
             try:
                 if parse_diff:
                     parser = DirectLatexdiffParser()
                     parsed_example = parser.parse_latex_diff(argument, rewritten_argument, "./temp_output")
-                    ic(parsed_example)
                     data, _ = fuzzy_post_process_edits([parsed_example])
-                    ic(data)
+                    # Extract edits from old format
+                    all_edits = process_completion(completion, sentences)
                 else:
-                    data = json_repair.loads(completion)
-                
-                if isinstance(data, dict) and "sentence_edits" in data:
-                    sentence_edits = data.get("sentence_edits", [])
-                    rewritten_sentences = [edit.get("rewritten_sentence", edit.get("original_sentence")) for edit in sentence_edits]
-                    rewritten_argument = " ".join(rewritten_sentences)
-                    
+                    # Use process_completion from ops (same as GRPO)
+                    all_edits = process_completion(completion, sentences)
+
+                if all_edits:
+                    parse_ok = True
+                    logger.info(f"process_completion returned {len(all_edits)} edits")
                     baseline_cls_scores = _predict_dimension_scores(argument)
 
-                    for sentence_edit in sentence_edits:
-                        original_sentence = sentence_edit.get("original_sentence")
-                        tracked_changes = sentence_edit.get("tracked_changes", "")
-                        
-                        parsed_edits = re.findall(r'<del reason=["\'](.*?)?["\']>(.+?)</del><ins>(.*?)</ins>', tracked_changes)
-                        for reason, inappropriate_part, rewritten_part in parsed_edits:
-                            edit = {
-                                "reason": reason,
-                                "inappropriate_part": inappropriate_part,
-                                "rewritten_part": rewritten_part,
-                            }
-                            logger.info(f"Extracted edit: {edit}")
-                            scored_edit = score_edit(argument, edit, baseline_scores=baseline_cls_scores, original_sentence_context=original_sentence)
-                            scored_edit['original_sentence'] = original_sentence
-                            scored_edits.append(scored_edit)
-                    parse_ok = True
-                elif isinstance(data, dict):
-                    edits_list = data.get("edits", [])
-                    ic(edits_list)
-                    baseline_cls_scores = _predict_dimension_scores(argument)
-                    scored_edits = [score_edit(argument, e, baseline_scores=baseline_cls_scores) for e in edits_list]
-                    ic(scored_edits)
-                    parse_ok = True
+                    # Score each edit
+                    for idx_edit, edit in enumerate(all_edits):
+                        logger.info(f"Scoring edit {idx_edit + 1}/{len(all_edits)}: {edit}")
+                        # Get sentence context from sentence_id
+                        sentence_id = edit.get("sentence_id", 0)
+                        try:
+                            original_sentence = sentences[sentence_id - 1] if 0 < sentence_id <= len(sentences) else None
+                        except (IndexError, TypeError):
+                            original_sentence = None
+
+                        scored_edit = score_edit(
+                            argument,
+                            edit,
+                            baseline_scores=baseline_cls_scores,
+                            original_sentence_context=original_sentence
+                        )
+                        scored_edit['original_sentence'] = original_sentence or ""
+                        scored_edit['sentence_id'] = sentence_id
+                        scored_edits.append(scored_edit)
+
+                    logger.info(f"Parsed {len(scored_edits)} edits from completion")
 
             except Exception as e:
-                logger.debug(f"JSON parse failed on example {idx}: {e}")
+                import traceback
+                logger.error(f"Completion processing failed on example {idx}: {e}")
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                logger.error(f"Scored {len(scored_edits)} edits before exception")
                 scored_edits = []
 
             if parse_ok:
@@ -537,50 +514,20 @@ def main(checkpoint_root: str, output_jsonl: str, use_base_model_only: bool = Fa
             total_valid_edits += valid_count
             total_overall_reward_ones += overall_ones
 
-            # Build argument after applying edits with overall reward = 1
-            argument_after_edits = argument
-            if parse_ok and "sentence_edits" in data and isinstance(data["sentence_edits"], list):
-                final_sentences = []
-                for sentence_edit in data["sentence_edits"]:
-                    original_sentence = sentence_edit.get("original_sentence")
-                    
-                    if not original_sentence:
-                        final_sentences.append(sentence_edit.get("rewritten_sentence", ""))
-                        continue
+            # Build argument after applying edits with overall reward = 1 (using ops)
+            # Filter edits to only those with perfect score
+            perfect_edits = [
+                {
+                    'original_sentence': e.get('original_sentence', ''),
+                    'inappropriate_part': e.get('inappropriate_part'),
+                    'rewritten_part': e.get('rewritten_part')
+                }
+                for e in scored_edits
+                if e.get("rewards", {}).get("overall") == 1.0
+            ]
 
-                    sentence_after_edits = original_sentence
-                    
-                    tracked_changes = sentence_edit.get("tracked_changes", "")
-                    parsed_edits_in_order = re.findall(r'<del reason=["\'](.*?)?["\']>(.+?)</del><ins>(.*?)</ins>', tracked_changes)
-
-                    for reason, inappropriate_part, rewritten_part in parsed_edits_in_order:
-                        found_scored_edit = None
-                        for se in scored_edits:
-                            if (se.get("original_sentence") == original_sentence and
-                                se.get("inappropriate_part") == inappropriate_part and
-                                se.get("rewritten_part") == rewritten_part and
-                                se.get("reason") == reason):
-                                found_scored_edit = se
-                                break
-                        
-                        if found_scored_edit and found_scored_edit.get("rewards", {}).get("overall") == 1.0:
-                            if isinstance(inappropriate_part, str) and isinstance(rewritten_part, str) and inappropriate_part in sentence_after_edits:
-                                sentence_after_edits = sentence_after_edits.replace(inappropriate_part, rewritten_part, 1)
-
-                    final_sentences.append(sentence_after_edits)
-                
-                argument_after_edits = " ".join(final_sentences)
-            else:
-                # Fallback for old format or parse failure
-                for e in scored_edits:
-                    try:
-                        if e.get("rewards", {}).get("overall") == 1.0:
-                            old = e.get("inappropriate_part")
-                            new = e.get("rewritten_part")
-                            if isinstance(old, str) and isinstance(new, str) and old in argument_after_edits:
-                                argument_after_edits = argument_after_edits.replace(old, new, 1)
-                    except Exception:
-                        pass
+            # Apply edits using ops.edit_applier (same as GRPO)
+            argument_after_edits = apply_edits_to_argument(perfect_edits, sentences, argument)
 
             # Argument-level classifier metrics
             # App.: flip from inappropriate (>0.5) to appropriate (<=0.5)

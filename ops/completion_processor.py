@@ -27,12 +27,15 @@ def process_completion(completion, original_sentences=None):
             return valid_edits
 
         sentence_edits = data.get("sentence_edits", [])
+        logger.info(f"Found {len(sentence_edits)} sentence_edits in completion")
 
         for sentence_edit in sentence_edits:
             sentence_id = sentence_edit.get("sentence_id")
             edits = sentence_edit.get("edits", [])
+            logger.info(f"Processing sentence_id={sentence_id} with {len(edits)} edits")
 
             if sentence_id is None or not edits:
+                logger.warning(f"Skipping sentence_edit: sentence_id={sentence_id}, num_edits={len(edits)}")
                 continue
 
             # Convert sentence_id to integer if it's a string
@@ -94,4 +97,5 @@ def process_completion(completion, original_sentences=None):
         # Return whatever was successfully parsed before the error.
         pass
 
+    logger.info(f"Extracted {len(valid_edits)} total valid edits from completion")
     return valid_edits

@@ -81,21 +81,38 @@ def _calculate_edit_scores(prompts, completions, semantic_similarity_scorer, hum
                 dense_edit_scores.append(0.0)
                 continue
 
-            # Calculate all scores once
-            human_like_reward = human_like_scorer.calculate_human_likeness(
-                original_argument, original_sentence, inappropriate_part, rewritten_part
-            )
+            # Calculate scores only for enabled scorers
+            # Store scores in a list to only include enabled scorers
+            enabled_scores = []
 
-            semantic_similarity_reward, ss_score = semantic_similarity_scorer.calculate_semantic_similarity(
-                original_sentence, inappropriate_part, rewritten_part
-            )
+            if human_like_scorer is not None:
+                human_like_reward = human_like_scorer.calculate_human_likeness(
+                    original_argument, original_sentence, inappropriate_part, rewritten_part
+                )
+                enabled_scores.append(human_like_reward)
 
-            fluency_reward = fluency_scorer.calculate_fluency(
-                original_sentence, inappropriate_part, rewritten_part
-            )
+            if semantic_similarity_scorer is not None:
+                semantic_similarity_reward, ss_score = semantic_similarity_scorer.calculate_semantic_similarity(
+                    original_sentence, inappropriate_part, rewritten_part
+                )
+                enabled_scores.append(semantic_similarity_reward)
 
-            # Sparse score: all three must pass (binary)
-            if human_like_reward == 0.0 or semantic_similarity_reward == 0.0 or fluency_reward == 0.0:
+            if fluency_scorer is not None:
+                fluency_reward = fluency_scorer.calculate_fluency(
+                    original_sentence, inappropriate_part, rewritten_part
+                )
+                enabled_scores.append(fluency_reward)
+
+            # If no scorers are enabled, treat as passing (edge case)
+            if not enabled_scores:
+                sparse_edit_scores.append(1.0)
+                dense_edit_scores.append(1.0)
+                edit["original_sentence"] = original_sentence
+                perfect_edits.append(edit)
+                continue
+
+            # Sparse score: all enabled scorers must pass (binary)
+            if any(score == 0.0 for score in enabled_scores):
                 sparse_edit_scores.append(0.0)
             else:
                 # This edit passed all checks - it's a perfect edit
@@ -103,9 +120,8 @@ def _calculate_edit_scores(prompts, completions, semantic_similarity_scorer, hum
                 sparse_edit_scores.append(1.0)
                 perfect_edits.append(edit)
 
-            # Dense score: average of human-likeness (binary), semantic similarity (binary), and fluency (binary)
-            # All scorers remain binary/sparse for consistency
-            dense_score = (human_like_reward + semantic_similarity_reward + fluency_reward) / 3.0
+            # Dense score: average of only the enabled scorers
+            dense_score = sum(enabled_scores) / len(enabled_scores)
             dense_edit_scores.append(dense_score)
 
         sparse_score = sum(sparse_edit_scores) / len(sparse_edit_scores) if sparse_edit_scores else 0.0
@@ -131,18 +147,23 @@ def _calculate_edit_scores(prompts, completions, semantic_similarity_scorer, hum
 @weave.op(tracing_sample_rate=0.1)
 def dense_local_appropriateness_reward(prompts, completions, semantic_similarity_scorer, human_like_scorer, fluency_scorer, **kwargs):
     """
-    Dense local reward that returns the average of binary scores from all three scorers
-    (human-likeness, semantic similarity, fluency).
+    Dense local reward that returns the average of binary scores from enabled scorers.
+    Only scorers that are not None are included in the calculation.
 
     This provides partial credit for edits that pass some but not all checks, enabling better
-    gradient signals during training. For example:
+    gradient signals during training. For example, with all 3 scorers enabled:
     - Edit passing all 3 checks: score = 1.0
     - Edit passing 2/3 checks: score = 0.67
     - Edit passing 1/3 checks: score = 0.33
     - Edit passing 0/3 checks: score = 0.0
 
+    With only 2 scorers enabled (e.g., semantic similarity and fluency):
+    - Edit passing both checks: score = 1.0
+    - Edit passing 1/2 checks: score = 0.5
+    - Edit passing 0/2 checks: score = 0.0
+
     Note: All individual scorers remain binary/sparse - the "density" comes from averaging them
-    rather than requiring all to pass.
+    rather than requiring all to pass. Disabled scorers (None) are ignored, not treated as passing.
 
     This is a lightweight wrapper around _calculate_edit_scores.
     """

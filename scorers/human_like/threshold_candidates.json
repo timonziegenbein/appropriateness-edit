@@ -1,0 +1,27 @@
+{
+  "model_path": "scorers/human_like/models/human_like_v3.pth",
+  "dataset_name": "timonziegenbein/human-like-edit-sequences",
+  "split": "dev",
+  "num_positive_examples": 13473,
+  "statistics": {
+    "mean": 1.3756163246796371,
+    "median": 1.3024694919586182,
+    "std": 0.35754638746415446,
+    "min": 1.010092854499817,
+    "max": 13.50517749786377
+  },
+  "thresholds": {
+    "p80": 1.5283911228179932,
+    "p85": 1.5622678279876707,
+    "p90": 1.6266935110092164,
+    "p95": 1.8326074123382565,
+    "p99": 2.530271043777471
+  },
+  "percentiles": [
+    80,
+    85,
+    90,
+    95,
+    99
+  ]
+}

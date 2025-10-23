@@ -1,0 +1,49 @@
+{
+  "all_results": [
+    {
+      "threshold_name": "p99",
+      "threshold_value": 2.452725653648376,
+      "human_like_score": {
+        "mean": 0.9615615615615616
+      },
+      "perplexity": {
+        "mean": 1.493090830458842
+      },
+      "threshold": {
+        "mean": 2.4527256536483764
+      },
+      "accuracy": 0.9615615615615616,
+      "precision": 1.0,
+      "recall": 0.9615615615615616,
+      "f1": 0.9804041641151255,
+      "mean": 0.20686846656995697
+    }
+  ],
+  "best_by_f1": {
+    "threshold_name": "p99",
+    "threshold_value": 2.452725653648376,
+    "human_like_score": {
+      "mean": 0.9615615615615616
+    },
+    "perplexity": {
+      "mean": 1.493090830458842
+    },
+    "threshold": {
+      "mean": 2.4527256536483764
+    },
+    "accuracy": 0.9615615615615616,
+    "precision": 1.0,
+    "recall": 0.9615615615615616,
+    "f1": 0.9804041641151255,
+    "mean": 0.20686846656995697
+  },
+  "config": {
+    "threshold_file": "scorers/human_like/threshold_candidates_v4.json",
+    "model_path": "scorers/human_like/models/human_like_v4.pth",
+    "eval_dataset_name": "timonziegenbein/human-like-edit-sequences",
+    "split": "test",
+    "project": "human-like-scorer-eval",
+    "device": "cuda",
+    "run_name": "threshold_comparison_v4_cleaned"
+  }
+}

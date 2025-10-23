@@ -29,7 +29,7 @@ def process_prompt(prompt):
             actual_task_content = actual_task_content[:token_pos].strip()
 
     # Now extract sentences from the actual task content
-    sentences_match = re.search(r'Input Sentences:(.*)', actual_task_content, re.DOTALL)
+    sentences_match = re.search(r'Input Sentences:(.*?)(?:JSON Output:|$)', actual_task_content, re.DOTALL)
     if not sentences_match:
         return None, None
 

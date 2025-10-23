@@ -10,14 +10,29 @@ import weave
 from scorers.human_like.model_defs import LanguageModel
 
 logger = logging.getLogger(__name__)
-hl_vocab = {'<pad>': 0, 'keep': 1, 'del': 2, 'add': 3, 'replace': 4}
+
+# V2 vocab with 'keep-in-edit' token
+hl_vocab = {'<pad>': 0, 'keep': 1, 'del': 2, 'add': 3, 'replace': 4, 'keep-in-edit': 5}
 
 class HumanLikeScorer:
-    def __init__(self, device, threshold=1.1465, max_len=500):
+    def __init__(self, device, model_path="scorers/human_like/models/human_like_v4.pth",
+                 threshold=2.452725653648376, max_len=500):
+        """
+        Initialize HumanLikeScorer.
+
+        Args:
+            device: torch device
+            model_path: Path to the trained model checkpoint
+            threshold: Perplexity threshold for human-like classification (default: 2.4527, P99 from v4)
+            max_len: Maximum sequence length
+        """
         self.device = device
         self.threshold = threshold
         self.max_len = max_len
+        self.model_path = model_path
+
         self.model, self.tokenizer = self._load_hl_model(device)
+        logger.info(f"Loaded HumanLikeScorer: model={model_path}, threshold={threshold}")
 
     def _load_hl_model(self, device):
         """Loads the human-like model and tokenizer."""
@@ -25,8 +40,20 @@ class HumanLikeScorer:
         hl_nhead = 2
         hl_nhid = 200
         hl_nlayers = 2
-        human_like_model = LanguageModel(len(hl_vocab), hl_embedding_dim, hl_nhead, hl_nhid, hl_nlayers).to(device)
-        human_like_model.load_state_dict(torch.load("scorers/human_like/human_like_language_model_v2.pth", map_location=device))
+        vocab_size = len(hl_vocab)
+
+        # Create model with dropout=0 for inference (no dropout during evaluation)
+        human_like_model = LanguageModel(
+            vocab_size, hl_embedding_dim, hl_nhead, hl_nhid, hl_nlayers, dropout=0.0
+        ).to(device)
+
+        # Load model checkpoint
+        checkpoint = torch.load(self.model_path, map_location=device)
+        if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+            human_like_model.load_state_dict(checkpoint['model_state_dict'])
+        else:
+            human_like_model.load_state_dict(checkpoint)
+
         human_like_model.eval()
         human_like_tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
         return human_like_model, human_like_tokenizer

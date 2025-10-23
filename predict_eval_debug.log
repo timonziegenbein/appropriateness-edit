@@ -1,0 +1,113 @@
+INFO 10-23 15:05:37 [__init__.py:235] Automatically detected platform cuda.
+/mnt/home/tziegenb/.conda/envs/feedback/lib/python3.10/site-packages/sentsplit/segment.py:9: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+2025-10-23 15:05:43,319 | INFO | __main__ | Loading scorers...
+2025-10-23 15:05:43,325 | INFO | sentence_transformers.SentenceTransformer | Load pretrained SentenceTransformer: google/embeddinggemma-300m
+2025-10-23 15:05:48,450 | INFO | sentence_transformers.SentenceTransformer | 14 prompts are loaded, with the keys: ['query', 'document', 'BitextMining', 'Clustering', 'Classification', 'InstructionRetrieval', 'MultilabelClassification', 'PairClassification', 'Reranking', 'Retrieval', 'Retrieval-query', 'Retrieval-document', 'STS', 'Summarization']
+2025-10-23 15:05:49,464 | INFO | scorers.human_like.human_like_scorer | Loaded HumanLikeScorer: model=scorers/human_like/models/human_like_v4.pth, threshold=2.452725653648376
+2025-10-23 15:05:49,465 | INFO | scorers.fluency.fluency_scorer | Loading ModernBERT fluency model from: /mnt/home/tziegenb/appropriateness-edit/scorers/fluency/modernbert_gec_extended_v2/checkpoint-500
+2025-10-23 15:05:51,361 | INFO | scorers.fluency.fluency_scorer | ModernBERT fluency model loaded successfully
+Device set to use cuda:0
+/mnt/home/tziegenb/.conda/envs/feedback/lib/python3.10/site-packages/transformers/pipelines/text_classification.py:111: UserWarning: `return_all_scores` is now deprecated,  if want a similar functionality use `top_k=None` instead of `return_all_scores=True` or `top_k=1` instead of `return_all_scores=False`.
+  warnings.warn(
+2025-10-23 15:05:56,119 | INFO | __main__ | Starting validation edit prediction. Output file: models/predictions/base_model_eval.jsonl
+Loading checkpoint shards:   0%|          | 0/4 [00:00<?, ?it/s]Loading checkpoint shards:  25%|██▌       | 1/4 [00:01<00:03,  1.08s/it]Loading checkpoint shards:  50%|█████     | 2/4 [00:01<00:01,  1.24it/s]Loading checkpoint shards:  75%|███████▌  | 3/4 [00:02<00:00,  1.41it/s]Loading checkpoint shards: 100%|██████████| 4/4 [00:02<00:00,  2.11it/s]Loading checkpoint shards: 100%|██████████| 4/4 [00:02<00:00,  1.67it/s]
+[2025-10-23 15:06:04,069] [INFO] [real_accelerator.py:254:get_accelerator] Setting ds_accelerator to cuda (auto detect)
+Warning: The cache directory for DeepSpeed Triton autotune, /mnt/home/tziegenb/.triton/autotune, appears to be on an NFS system. While this is generally acceptable, if you experience slowdowns or hanging when DeepSpeed exits, it is recommended to set the TRITON_CACHE_DIR environment variable to a non-NFS path.
+[2025-10-23 15:06:04,888] [INFO] [logging.py:107:log_dist] [Rank -1] [TorchCheckpointEngine] Initialized with serialization = False
+2025-10-23 15:06:05,020 | INFO | __main__ | Loaded generation model and tokenizer in 8.9s
+2025-10-23 15:06:06,956 | INFO | __main__ | Loaded validation dataset: 124 examples; filtered to inappropriate and limited: 1
+2025-10-23 15:06:06,987 | INFO | __main__ | Model input: <|begin_of_text|><|start_header_id|>system<|end_header_id|>
+
+Cutting Knowledge Date: December 2023
+Today Date: 26 Jul 2024
+
+<|eot_id|><|start_header_id|>user<|end_header_id|>
+
+Task: Analyze the following argument by breaking it down into individual sentences. For each sentence, identify all inappropriate parts and edit it to make it appropriate while preserving the author's core point. The output must be a single JSON object with a single key "sentence_edits". The value of this key should be a list of objects. Each object in the list must correspond to a sentence from the original argument and contain three keys in this specific order: "sentence_id": The sentence number (e.g., 1, 2, 3) corresponding to the input sentence. "rewritten_sentence": The full, clean, and fluent version of the rewritten sentence. "edits": A list of JSON objects, where each object represents a single correction and contains three keys: "inappropriate_part", "rewritten_part", and "reason". The "reason" must be one of the allowed reason values. Definitions for inappropriateness reasons: Toxic Emotions: Emotions appealed to are deceptive or so intense that they discourage critical evaluation. Missing Commitment: The issue is not taken seriously or there is no openness to others' arguments. Missing Intelligibility: Meaning is unclear/irrelevant or reasoning is not understandable. Other Reasons: Severe orthographic errors or other issues not covered above. Allowed Reason values: Toxic Emotions Missing Commitment Missing Intelligibility Other Reasons Example: Issue: Pro choice vs pro life Input Sentences: Sentence 1: for everyone who is talking about RAPE, let me ask you one thing!!!! Sentence 2: if you got in a huge fight with someone and ended up breaking your hand or arm ... would you cut it off just because it would REMIND you of that expirience??? Sentence 3: if your actualy SANE you would say no and if you say yes you need to see a Physiatrist!!!! JSON Output: { "sentence_edits": [ { "sentence_id": 1, "rewritten_sentence": "For those discussing rape, consider this:", "edits": [ { "inappropriate_part": "for everyone who is talking about", "rewritten_part": "For those discussing", "reason": "Missing Intelligibility" }, { "inappropriate_part": "RAPE", "rewritten_part": "rape", "reason": "Toxic Emotions" }, { "inappropriate_part": ", let me ask you one thing!!!!", "rewritten_part": ", consider this:", "reason": "Toxic Emotions" } ] }, { "sentence_id": 2, "rewritten_sentence": "If you got into a fight and broke your arm, would you amputate it just because it would remind you of that experience?", "edits": [ { "inappropriate_part": "if", "rewritten_part": "If", "reason": "Other Reasons" }, { "inappropriate_part": "got in", "rewritten_part": "got into", "reason": "Missing Intelligibility" }, { "inappropriate_part": "a huge fight with someone", "rewritten_part": "a fight", "reason": "Toxic Emotions" }, { "inappropriate_part": "ended up breaking your hand or arm", "rewritten_part": "broke your arm", "reason": "Missing Intelligibility" }, { "inappropriate_part": "...", "rewritten_part": ",", "reason": "Other Reasons" }, { "inappropriate_part": "cut it off just because it would REMIND you", "rewritten_part": "amputate it just because it would remind you", "reason": "Missing Intelligibility" }, { "inappropriate_part": "expirience???", "rewritten_part": "experience?", "reason": "Toxic Emotions" } ] }, { "sentence_id": 3, "rewritten_sentence": "Most would agree that the logical response is to treat the injury, even if the memory of the event remains.", "edits": [ { "inappropriate_part": "if your actualy SANE you would say no and if you say yes you need to see a Physiatrist!!!!", "rewritten_part": "Most would agree that the logical response is to treat the injury, even if the memory of the event remains.", "reason": "Toxic Emotions" } ] } ] } Now complete the task for the following: Issue: Pro choice vs pro life Input Sentences: Sentence 1: The only other choices are, adoption or keep it. Sentence 2: And I know many children get adopted but many don't and it might be better off to just have an abortion to let them suffer. Sentence 3: That's the chance they take, I guess. Sentence 4: But who are we to decide one womans pregnancy. JSON Output:<|eot_id|><|start_header_id|>assistant<|end_header_id|>
+
+
+2025-10-23 15:06:20,345 | INFO | __main__ | Model completion: Here's the analysis of the input sentences:
+
+{
+  "sentence_edits": [
+    {
+      "sentence_id": 1,
+      "rewritten_sentence": "The other options are adoption or keeping the child.",
+      "edits": [
+        {
+          "inappropriate_part": "The only other choices are,",
+          "rewritten_part": "The other options are",
+          "reason": "Missing Intelligibility"
+        },
+        {
+          "inappropriate_part": "adoption or keep it",
+          "rewritten_part": "adoption or keeping the child",
+          "reason": "Missing Intelligibility"
+        }
+      ]
+    },
+    {
+      "sentence_id": 2,
+      "rewritten_sentence": "However, many children do get adopted, but many don't, and it might be better to have an abortion to spare them suffering.",
+      "edits": [
+        {
+          "inappropriate_part": "And I know many children get adopted but many don't",
+          "rewritten_part": "However, many children do get adopted, but many don't",
+          "reason": "Missing Intelligibility"
+        },
+        {
+          "inappropriate_part": "and it might be better off to just have an abortion to let them suffer",
+          "rewritten_part": "and it might be better to have an abortion to spare them suffering",
+          "reason": "Toxic Emotions"
+        }
+      ]
+    },
+    {
+      "sentence_id": 3,
+      "rewritten_sentence": "That's the risk they take.",
+      "edits": [
+        {
+          "inappropriate_part": "That's the chance they take, I guess",
+          "rewritten_part": "That's the risk they take",
+          "reason": "Other Reasons"
+        }
+      ]
+    },
+    {
+      "sentence_id": 4,
+      "rewritten_sentence": "Who are we to decide a woman's pregnancy?",
+      "edits": [
+        {
+          "inappropriate_part": "But who are we to decide one womans pregnancy",
+          "rewritten_part": "Who are we to decide a woman's pregnancy",
+          "reason": "Missing Intelligibility"
+        }
+      ]
+    }
+  ]
+}
+2025-10-23 15:06:20,345 | WARNING | weave.trace.op | Warning: Traces will not be logged. Call weave.init to log your traces to a project.
+ (subsequent messages of this type will be suppressed)
+2025-10-23 15:06:20,424 | INFO | __main__ | Scoring edit: inappropriate_part='The only other choices are,', rewritten_part='The other options are', reason='Missing Intelligibility'
+2025-10-23 15:06:20,424 | INFO | __main__ | is_well_formed: True
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 21.96it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 56.73it/s]
+2025-10-23 15:06:20,495 | INFO | __main__ | Semantic similarity: (1.0, 0.7956772446632385)
+2025-10-23 15:06:22,503 | INFO | __main__ | Fluency Input: context='The only other choices are, adoption or keep it.', inappropriate_part='The only other choices are,', rewritten_part='The other options are'
+2025-10-23 15:06:22,503 | INFO | __main__ | Fluency Output: 0.0
+2025-10-23 15:06:22,516 | INFO | __main__ | Human-like score: 1.0
+2025-10-23 15:06:22,682 | INFO | __main__ | App Reward Input: modified_argument='The other options are adoption or keep it. And I know many children get adopted but many don't and it might be better off to just have an abortion to let them suffer. That's the chance they take, I guess. But who are we to decide one womans pregnancy.', reason='Missing Intelligibility'
+2025-10-23 15:06:22,683 | INFO | __main__ | App Reward Output: before_score=0.641075849533081, after_score=0.5577168464660645, app_reward=1.0
+2025-10-23 15:06:22,683 | INFO | __main__ | Overall score: 0.0
+2025-10-23 15:06:22,824 | INFO | root | Computing perplexity for input 1/1
+`loss_type=None` was set in the config but it is unrecognised.Using the default loss: `ForCausalLMLoss`.
+2025-10-23 15:06:23,416 | INFO | __main__ | [1/1] gen=16.5s edits=0 valid=0 overall1=0 | issue='Pro choice vs pro life:'
+2025-10-23 15:06:23,420 | INFO | __main__ | Finished. Time=16.5s | parse_ok=1/1 | edits=0 valid_edits=0 overall1=0 | App%=0.00%
+2025-10-23 15:06:23,420 | INFO | __main__ | Flip percentages per dimension:
+2025-10-23 15:06:23,420 | INFO | __main__ | - Inappropriateness: 0.00%
+2025-10-23 15:06:23,420 | INFO | __main__ | - Toxic Emotions: 100.00%
+2025-10-23 15:06:23,420 | INFO | __main__ | - Missing Commitment: 100.00%
+2025-10-23 15:06:23,420 | INFO | __main__ | - Missing Intelligibility: 100.00%
+2025-10-23 15:06:23,420 | INFO | __main__ | - Other Reasons: 100.00%
+2025-10-23 15:06:23,420 | INFO | __main__ | Wrote models/predictions/base_model_eval.jsonl
