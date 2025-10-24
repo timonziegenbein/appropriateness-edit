@@ -1,0 +1,1773 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Writing Editor</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.3.0/dist/chart.umd.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    /* Base styles */
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: 'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+      background: #f5f7fb;
+      color: #2a2f45;
+      line-height: 1.6;
+      padding: 40px;
+      box-sizing: border-box;
+      font-size: 16px;
+    }
+
+    h1 {
+      margin: 0 0 32px;
+      font-size: 36px;
+      font-weight: 700;
+      color: #2a2f45;
+      text-align: left;
+    }
+
+    h2 {
+      margin-top: 0;
+      margin-bottom: 12px;
+      font-size: 18px;
+      font-weight: 600;
+      color: #2a2f45;
+    }
+
+    /* Container to center content */
+    .editor-wrapper {
+      max-width: 1300px;
+      margin: 0 auto;
+    }
+
+    .editor-container {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 40px;
+      align-items: flex-start;
+    }
+
+    /* Left pane stacks input and output vertically */
+    .left-pane {
+      display: flex;
+      flex-direction: column;
+      gap: 32px;
+    }
+
+    /* Stick the edits panel to the top as the page scrolls, mimicking Grammarly's fixed suggestions */
+    .edits-panel {
+      position: sticky;
+      top: 20px;
+      height: fit-content;
+      max-height: calc(100vh - 60px);
+      overflow-y: auto;
+    }
+
+    /* File upload and example selector styles */
+    .file-upload {
+      margin-bottom: 24px;
+    }
+    .file-upload label {
+      font-weight: 600;
+      margin-right: 8px;
+    }
+    .file-upload input[type="file"] {
+      font-size: 14px;
+    }
+
+    .issue-display {
+      padding: 10px 14px;
+      background: #f8fafc;
+      border: 1px solid #e3e8f1;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      font-size: 15px;
+      color: #4f4f72;
+    }
+
+    /* Statistics panel for summarizing edits and scores */
+    .statistics-panel {
+      margin-top: 24px;
+      padding: 16px;
+      border: 1px solid #e3e8f1;
+      border-radius: 8px;
+      background: #ffffff;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .statistics-panel h3 {
+      margin-top: 0;
+      margin-bottom: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      color: #2a2f45;
+    }
+    .statistics-panel ul {
+      padding-left: 20px;
+      margin: 0;
+    }
+    .statistics-panel li {
+      margin-bottom: 4px;
+    }
+
+    /* Beautify statistics sections and grids */
+    .statistics-panel .stats-section {
+      margin-bottom: 20px;
+    }
+    .statistics-panel .stats-section:last-child {
+      margin-bottom: 0;
+    }
+    .statistics-panel .stats-section h4 {
+      margin: 0 0 8px;
+      font-size: 15px;
+      font-weight: 600;
+      color: #2a2f45;
+    }
+    .statistics-panel .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      row-gap: 6px;
+      column-gap: 16px;
+    }
+    .statistics-panel .stats-grid .label {
+      color: #5f6368;
+      font-size: 14px;
+    }
+    .statistics-panel .stats-grid .value {
+      text-align: right;
+      color: #2a2f45;
+      font-weight: 600;
+      font-size: 14px;
+    }
+    .statistics-panel .scores-grid {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      row-gap: 6px;
+      column-gap: 12px;
+    }
+
+    /* Two-column grid for metrics and ground truth tables */
+    .statistics-panel .two-col-grid {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      row-gap: 6px;
+      column-gap: 12px;
+    }
+
+    /* Allow the same grid styles to be used outside the statistics panel, such as in the dataset overview */
+    #dataset-overview .stats-grid, #dataset-overview .scores-grid {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      row-gap: 6px;
+      column-gap: 12px;
+    }
+    #dataset-overview .two-col-grid {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      row-gap: 6px;
+      column-gap: 12px;
+    }
+    .statistics-panel .scores-grid .label {
+      color: #5f6368;
+      font-size: 14px;
+    }
+    .statistics-panel .scores-grid .value {
+      text-align: right;
+      color: #2a2f45;
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    /* Four-column grid used for prediction vs ground truth comparisons */
+    .scores-grid-4 {
+      display: grid;
+      grid-template-columns: 1fr auto auto auto;
+      row-gap: 6px;
+      column-gap: 12px;
+    }
+
+    /* Dataset tabs for switching between multiple uploaded datasets */
+    .dataset-tabs {
+      display: flex;
+      gap: 10px;
+    }
+    .dataset-tabs button {
+      padding: 6px 14px;
+      background: #f5f7fb;
+      border: 1px solid #dbe2ef;
+      border-radius: 8px;
+      color: #2a2f45;
+      font-size: 14px;
+      cursor: pointer;
+      transition: background-color 0.2s, color 0.2s, border-color 0.2s;
+    }
+    .dataset-tabs button:hover {
+      background: #eef3fb;
+    }
+    .dataset-tabs button.active {
+      background: #4f8bf9;
+      border-color: #4f8bf9;
+      color: #ffffff;
+    }
+
+    /* Example navigation buttons */
+    .example-buttons {
+      margin-top: 40px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .example-buttons button {
+      padding: 8px 16px;
+      background: #f5f7fb;
+      border: 1px solid #dbe2ef;
+      border-radius: 8px;
+      color: #2a2f45;
+      font-size: 14px;
+      cursor: pointer;
+      transition: background-color 0.2s, color 0.2s, border-color 0.2s;
+    }
+    .example-buttons button:hover {
+      background: #eef3fb;
+    }
+    .example-buttons button.active {
+      background: #4f8bf9;
+      border-color: #4f8bf9;
+      color: #ffffff;
+    }
+
+    .panel {
+      background: #ffffff;
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+      border: 1px solid #e6eaf2;
+      box-sizing: border-box;
+    }
+
+    .input-panel textarea {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 14px 16px;
+      border: 1px solid #dbe2ef;
+      border-radius: 8px;
+      font-size: 15px;
+      resize: vertical;
+      margin-bottom: 20px;
+      background: #f8fafc;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .input-panel textarea:focus {
+      outline: none;
+      border-color: #7ca9ff;
+      box-shadow: 0 0 0 3px rgba(124, 169, 255, 0.3);
+    }
+    .input-panel textarea#json-input {
+      min-height: 180px;
+    }
+
+    .btn {
+      display: inline-block;
+      background: linear-gradient(90deg, #6ab7ff, #4f8bf9);
+      color: #ffffff;
+      padding: 12px 24px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 15px;
+      transition: opacity 0.2s ease;
+    }
+    .btn:hover {
+      opacity: 0.9;
+    }
+
+    .original-text,
+    .revised-text {
+      padding: 16px 18px;
+      border: 1px solid #e3e8f1;
+      border-radius: 8px;
+      min-height: 120px;
+      background: #f8fafc;
+      white-space: pre-wrap;
+      position: relative;
+      font-size: 15px;
+      line-height: 1.6;
+    }
+    .revised-text {
+      margin-top: 28px;
+    }
+    
+    del {
+      color: #d93025;
+      text-decoration: line-through;
+      background-color: rgba(234, 67, 53, 0.1);
+      padding: 1px 2px;
+      border-radius: 3px;
+    }
+    ins {
+      color: #188038;
+      text-decoration: none;
+      background-color: rgba(52, 168, 83, 0.15);
+      padding: 1px 2px;
+      border-radius: 3px;
+      font-weight: 500;
+    }
+
+    /* Edits list styles */
+    .edits-list {
+      margin-top: 24px;
+      max-height: 400px;
+      overflow-y: auto;
+      border: 1px solid #e3e8f1;
+      border-radius: 8px;
+      padding: 16px;
+      background: #ffffff;
+    }
+    .edit-item {
+      margin-bottom: 14px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background-color 0.2s, box-shadow 0.2s;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+    .edit-item:hover {
+      background: #f5f7fb;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+    }
+
+    /* Highlight styles based on reason */
+    .highlight {
+      cursor: pointer;
+      position: relative;
+      padding: 0 2px;
+      border-radius: 2px;
+      transition: background-color 0.15s ease;
+      text-decoration: none;
+    }
+    .highlight:hover {
+      background-color: rgba(100, 130, 255, 0.1);
+    }
+    /* Underline styles reminiscent of Grammarly suggestions */
+    .missing-intelligibility {
+      border-bottom: 2px dotted #f4b400;
+    }
+    .toxic-emotions {
+      border-bottom: 2px dotted #ea4335;
+    }
+    .other-reasons {
+      border-bottom: 2px dotted #4285f4;
+    }
+    .missing-commitment {
+      border-bottom: 2px dotted #34a853;
+    }
+
+    /* Styles for highlighting replaced text in the all-edits view */
+    .revised-highlight {
+      padding: 1px 3px;
+      border-radius: 3px;
+    }
+    .revised-highlight.missing-intelligibility { background-color: rgba(244, 180, 0, 0.2); }
+    .revised-highlight.toxic-emotions { background-color: rgba(234, 67, 53, 0.2); }
+    .revised-highlight.other-reasons { background-color: rgba(66, 133, 244, 0.2); }
+    .revised-highlight.missing-commitment { background-color: rgba(52, 168, 83, 0.2); }
+
+    /* Style for the changed portion of a diff inside highlights and tooltips */
+    .diff-change {
+      font-weight: 600;
+    }
+
+    /* Tooltip for showing suggestions */
+    .tooltip {
+      position: absolute;
+      z-index: 9999;
+      background: #ffffff;
+      border: 1px solid #dde4f3;
+      padding: 14px 18px;
+      border-radius: 10px;
+      max-width: 320px;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+      display: none;
+      font-size: 14px;
+      color: #2a2f45;
+    }
+    .tooltip::before {
+      content: '';
+      position: absolute;
+      top: -6px;
+      left: 28px;
+      border-width: 6px;
+      border-style: solid;
+      border-color: transparent transparent #ffffff transparent;
+      filter: drop-shadow(0 -1px 1px rgba(0, 0, 0, 0.1));
+    }
+    .tooltip h4 {
+      margin: 0 0 8px;
+      font-size: 15px;
+      font-weight: 600;
+      color: #2a2f45;
+    }
+    .tooltip p {
+      margin: 0;
+      line-height: 1.5;
+      color: #495270;
+    }
+  </style>
+</head>
+<body>
+  <div class="editor-wrapper">
+    <h1>Writing Editor</h1>
+
+    <div id="dataset-tabs" class="dataset-tabs" style="display:none; margin-bottom: 24px;"></div>
+
+    <div id="dataset-overview" class="panel" style="display: none; margin-bottom: 32px;">
+      <h2 style="margin-top: 0;">Dataset Overview</h2>
+      <div class="charts" style="margin-bottom: 24px; display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+        <div style="width:100%; height:350px;">
+          <canvas id="dataset-metrics-chart" aria-label="Dataset Comparison Chart" role="img"></canvas>
+        </div>
+        <div style="width:100%; height:350px;">
+          <canvas id="dataset-rewards-chart" aria-label="Dataset Rewards Chart" role="img"></canvas>
+        </div>
+      </div>
+      <div id="dataset-summary"></div>
+      <div id="dataset-pred-gt" style="margin-top: 24px;"></div>
+    </div>
+    <div class="editor-container">
+      <div class="left-pane">
+        <div class="panel input-panel">
+          <div class="file-upload">
+            <label for="file-input">Upload Examples JSONL:</label>
+            <input type="file" id="file-input" accept=".jsonl,.jsonl.txt,.txt" />
+          </div>
+          <div id="issue-display" class="issue-display" style="display:none;"></div>
+          <textarea id="text-input" style="display:none;"></textarea>
+          <textarea id="json-input" style="display:none;"></textarea>
+          <button class="btn" id="apply-btn" style="display:none;">Apply Edits</button>
+        </div>
+        <div class="panel output-panel">
+          <h2>Original Text with Highlights</h2>
+          <div class="original-text" id="original-display"></div>
+          <h2 style="margin-top: 24px;">Revised Text (Diff for perfect edits)</h2>
+          <div class="revised-text" id="revised-display"></div>
+          <h2 style="margin-top: 24px;">Revised Text (All Edits Applied)</h2>
+          <div class="revised-text" id="revised-display-all-edits"></div>
+        </div>
+        <div class="example-buttons" id="example-buttons"></div>
+    </div>
+    <div class="edits-panel panel">
+        <h2>Perfect Edits</h2>
+        <div class="edits-list" id="edits-list"></div>
+        <h2 style="margin-top: 24px;">Other Valid Edits</h2>
+        <div class="edits-list" id="other-edits-list"></div>
+        <h2 style="margin-top: 24px;">Statistics</h2>
+        <div class="statistics-panel" id="statistics-panel"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Prepopulate the editor with a sample text and JSON for demonstration purposes
+    const defaultText = `for everyone who is talking about RAPE, let me ask you one thing!!!! if you got in a huge fight with someone and ended up breaking your hand or arm ... would you cut it off just because it would REMIND you expirience??? if your actualy SANE you would say no and if you say yes you need to see a Physiatrist!!!!`;
+
+    const defaultJSON = `{
+  "edits": [
+    { "reason": "Missing Intelligibility", "inappropriate_part": "for everyone who is talking about", "rewritten_part": "For those discussing" },
+    { "reason": "Toxic Emotions", "inappropriate_part": "RAPE", "rewritten_part": "rape" },
+    { "reason": "Other Reasons", "inappropriate_part": ", ", "rewritten_part": "," },
+    { "reason": "Toxic Emotions", "inappropriate_part": "let me ask you one thing!!!!", "rewritten_part": "I would like to pose another scenario." },
+    { "reason": "Other Reasons", "inappropriate_part": "if", "rewritten_part": "If" },
+    { "reason": "Missing Intelligibility", "inappropriate_part": "in", "rewritten_part": "into" },
+    { "reason": "Toxic Emotions", "inappropriate_part": "huge fight with someone", "rewritten_part": "fight" },
+    { "reason": "Missing Intelligibility", "inappropriate_part": "ended up breaking", "rewritten_part": "broke your" },
+    { "reason": "Other Reasons", "inappropriate_part": "...", "rewritten_part": "," },
+    { "reason": "Missing Intelligibility", "inappropriate_part": "cut it off just because it would REMIND you", "rewritten_part": "amputate it to remove the physical reminder" },
+    { "reason": "Other Reasons", "inappropriate_part": "expirience???", "rewritten_part": "experience?" },
+    { "reason": "Toxic Emotions", "inappropriate_part": "if your actualy SANE you would say no", "rewritten_part": "Of course, the answer is no." },
+    { "reason": "Missing Commitment", "inappropriate_part": "and if you say yes you need to see a Physiatrist!!!!", "rewritten_part": "Although it is understandable to have emotional scars, physical scars can be treated and lived with, even if they remain as a reminder of the experience." }
+  ]
+}`;
+
+    // Map each reason type to a CSS class for styling
+    const reasonToClass = {
+      'Missing Intelligibility': 'missing-intelligibility',
+      'Toxic Emotions': 'toxic-emotions',
+      'Other Reasons': 'other-reasons',
+      'Missing Commitment': 'missing-commitment'
+    };
+
+    // Map classes to colors for highlighting diffs and icons
+    const colorMap = {
+      'missing-intelligibility': '#f4b400',
+      'toxic-emotions': '#ea4335',
+      'other-reasons': '#4285f4',
+      'missing-commitment': '#34a853'
+    };
+
+    // Global examples array loaded from JSONL and current selected index
+    let examples = [];
+    let currentExampleIndex = -1;
+
+    // Currently loaded example reference for easy access to its properties
+    let currentExample = null;
+
+    // Global dataset statistics computed when a JSONL file is loaded
+    let datasetStats = null;
+    // Support multiple datasets: each upload is stored here along with its stats
+    let datasets = [];
+    let currentDatasetIndex = -1;
+
+    // Chart.js chart instances
+    let metricsChart = null;
+    let rewardsChart = null;
+
+    /**
+     * Renders a comparative radar chart for all loaded datasets and summary
+     * tables for the currently active dataset.
+     */
+    function renderDatasetOverview() {
+      const container = document.getElementById('dataset-overview');
+      const summaryEl = document.getElementById('dataset-summary');
+      const datasetPredGtDiv = document.getElementById('dataset-pred-gt');
+
+      if (!datasets || datasets.length === 0 || !container || !summaryEl) {
+        if(container) container.style.display = 'none';
+        if (metricsChart) { metricsChart.destroy(); metricsChart = null; }
+        if (rewardsChart) { rewardsChart.destroy(); rewardsChart = null; }
+        return;
+      }
+      container.style.display = 'block';
+      
+      const colorPalette = [
+        { bg: 'rgba(75, 192, 192, 0.2)', border: 'rgb(75, 192, 192)' },
+        { bg: 'rgba(255, 99, 132, 0.2)', border: 'rgb(255, 99, 132)' },
+        { bg: 'rgba(54, 162, 235, 0.2)', border: 'rgb(54, 162, 235)' },
+        { bg: 'rgba(255, 205, 86, 0.2)', border: 'rgb(255, 205, 86)' },
+        { bg: 'rgba(153, 102, 255, 0.2)', border: 'rgb(153, 102, 255)' }
+      ];
+
+      // --- 1. RENDER METRICS CHART (compares all datasets) ---
+      const allMetricLabels = new Set();
+      datasets.forEach(ds => {
+        if (ds.datasetStats && ds.datasetStats.metricsSums) {
+          Object.keys(ds.datasetStats.metricsSums).forEach(key => {
+            if (key.toLowerCase() !== 'gm') { // Exclude 'GM'
+              allMetricLabels.add(key);
+            }
+          });
+        }
+      });
+      allMetricLabels.add('Perfect Edits %'); // Add our custom metric
+      const sortedLabels = Array.from(allMetricLabels).sort();
+      const chartLabels = sortedLabels.map(lab => (lab.toLowerCase() === 'ppl' ? 'PPL (norm-inv)' : lab));
+      
+      // Calculate min and max average PPL across all datasets for dynamic normalization
+      let minAvgPPL = Infinity;
+      let maxAvgPPL = -Infinity;
+      let hasPPL = false;
+      datasets.forEach(ds => {
+          const stats = ds.datasetStats;
+          if (stats.totalExamples > 0 && typeof stats.metricsSums.PPL !== 'undefined') {
+              hasPPL = true;
+              const avgPPL = stats.metricsSums.PPL / stats.totalExamples;
+              if (avgPPL < minAvgPPL) minAvgPPL = avgPPL;
+              if (avgPPL > maxAvgPPL) maxAvgPPL = avgPPL;
+          }
+      });
+      const pplRange = maxAvgPPL - minAvgPPL;
+
+      const chartDatasets = [];
+      datasets.forEach((ds, index) => {
+        const stats = ds.datasetStats;
+        const totalEx = stats.totalExamples;
+        if (!totalEx || totalEx === 0) return;
+
+        const metricsAvg = {};
+        for (const key in stats.metricsSums) {
+          metricsAvg[key] = stats.metricsSums[key] / totalEx;
+        }
+
+        const dataPoints = sortedLabels.map(label => {
+          if (label === 'Perfect Edits %') {
+            return stats.totalEdits > 0 ? stats.validPerfectEdits / stats.totalEdits : 0;
+          }
+          const val = metricsAvg[label] || 0;
+          if (label.toLowerCase() === 'ppl') {
+            if (hasPPL && pplRange > 0) {
+              // More than one dataset with different PPLs: Use relative normalization
+              const normalized = (val - minAvgPPL) / pplRange;
+              return 1.0 - normalized;
+            } else {
+              // Only one dataset, or all have same PPL: Use a robust absolute scale
+              return val > 0 ? Math.min(1, 1 / val) : 0;
+            }
+          }
+          return val;
+        });
+
+        const color = colorPalette[index % colorPalette.length];
+        chartDatasets.push({
+          label: ds.fileName,
+          data: dataPoints,
+          fill: true,
+          backgroundColor: color.bg,
+          borderColor: color.border,
+          pointBackgroundColor: color.border,
+          pointBorderColor: '#fff',
+          pointHoverBackgroundColor: '#fff',
+          pointHoverBorderColor: color.border
+        });
+      });
+
+      if (metricsChart) {
+        metricsChart.destroy();
+      }
+      const metricsCtx = document.getElementById('dataset-metrics-chart').getContext('2d');
+      metricsChart = new Chart(metricsCtx, {
+        type: 'radar',
+        data: { labels: chartLabels, datasets: chartDatasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            title: { display: true, text: 'Dataset Metrics Comparison' },
+            legend: { position: 'top', display: datasets.length > 1 },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  return `${context.dataset.label}: ${context.parsed.r.toFixed(3)}`;
+                }
+              }
+            }
+          },
+          scales: {
+            r: { beginAtZero: true, max: 1, ticks: { stepSize: 0.2, backdropColor: 'transparent' }, pointLabels: { font: { size: 13 } } }
+          }
+        }
+      });
+
+      // --- 2. RENDER REWARDS CHART ---
+      const rewardsCtx = document.getElementById('dataset-rewards-chart').getContext('2d');
+      const rewardsLabels = ['Semantic Similarity', 'Fluency', 'Human-Like', 'App', 'Perfect'];
+      const rewardsChartDatasets = [];
+
+      datasets.forEach((ds, index) => {
+          const averages = ds.datasetStats.rewardAverages;
+          if (!averages) return;
+
+          const dataPoints = [
+              averages.semantic_similarity,
+              averages.fluency,
+              averages.human_like,
+              averages.app,
+              averages.perfect
+          ];
+
+          const color = colorPalette[index % colorPalette.length];
+          rewardsChartDatasets.push({
+              label: ds.fileName,
+              data: dataPoints,
+              fill: true,
+              backgroundColor: color.bg,
+              borderColor: color.border,
+              pointBackgroundColor: color.border,
+              pointBorderColor: '#fff',
+              pointHoverBackgroundColor: '#fff',
+              pointHoverBorderColor: color.border
+          });
+      });
+
+      if (rewardsChart) {
+          rewardsChart.destroy();
+      }
+      rewardsChart = new Chart(rewardsCtx, {
+          type: 'radar',
+          data: {
+              labels: rewardsLabels,
+              datasets: rewardsChartDatasets
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              title: { display: true, text: 'Average Reward Scores (All Edits)' },
+              legend: { position: 'top', display: datasets.length > 1 },
+              tooltip: {
+                callbacks: {
+                  label: function(context) {
+                    return `${context.dataset.label}: ${context.parsed.r.toFixed(3)}`;
+                  }
+                }
+              }
+            },
+            scales: {
+              r: { beginAtZero: true, max: 1, ticks: { stepSize: 0.2, backdropColor: 'transparent' }, pointLabels: { font: { size: 13 } } }
+            }
+          }
+      });
+      
+      // --- 3. RENDER SUMMARY TABLES (for current dataset only) ---
+      const currentStats = datasetStats; // Use the global for the selected dataset
+      if (!currentStats || !currentStats.totalExamples) {
+        summaryEl.innerHTML = '';
+        datasetPredGtDiv.innerHTML = '';
+        return;
+      }
+      
+      const totalExCurrent = currentStats.totalExamples;
+      const validCount = currentStats.validEdits || 0;
+      const avgReward = { semantic_similarity: 0, fluency: 0, human_like: 0, perfect: 0 };
+      if (validCount > 0) {
+        avgReward.semantic_similarity = currentStats.rewardSums.semantic_similarity / validCount;
+        avgReward.fluency = currentStats.rewardSums.fluency / validCount;
+        avgReward.human_like = currentStats.rewardSums.human_like / validCount;
+        avgReward.perfect = currentStats.rewardSums.perfect / validCount;
+      }
+
+      let summaryHtml = '<div class="two-col-grid">';
+      summaryHtml += `<div class="label">Total examples</div><div class="value">${totalExCurrent}</div>`;
+      summaryHtml += `<div class="label">Total edits</div><div class="value">${currentStats.totalEdits}</div>`;
+      summaryHtml += `<div class="label">Valid edits</div><div class="value">${currentStats.validEdits}</div>`;
+      summaryHtml += `<div class="label">Perfect edits</div><div class="value">${currentStats.validPerfectEdits}</div>`;
+      const reasonCorrectPercent = currentStats.totalEdits > 0 ? (currentStats.reasonCorrectEdits / currentStats.totalEdits * 100).toFixed(1) : 0;
+      summaryHtml += `<div class="label">Reason correct</div><div class="value">${currentStats.reasonCorrectEdits} (${reasonCorrectPercent}%)</div>`;
+      summaryHtml += `<div class="label">Avg reward (valid)</div><div class="value">SS ${avgReward.semantic_similarity.toFixed(2)}, FL ${avgReward.fluency.toFixed(2)}, HL ${avgReward.human_like.toFixed(2)}, PF ${avgReward.perfect.toFixed(2)}</div>`;
+      summaryHtml += '</div>';
+      summaryEl.innerHTML = summaryHtml;
+      
+      const gtAvg = {};
+      for (const key in currentStats.groundTruthSums) {
+        gtAvg[key] = currentStats.groundTruthSums[key] / totalExCurrent;
+      }
+      const predBeforeAvg = {};
+      const predAfterAvg = {};
+      for (const key in currentStats.predictedBeforeSums) {
+        predBeforeAvg[key] = currentStats.predictedBeforeSums[key] / totalExCurrent;
+      }
+      for (const key in currentStats.predictedAfterSums) {
+        predAfterAvg[key] = currentStats.predictedAfterSums[key] / totalExCurrent;
+      }
+
+      const catSet = new Set([...Object.keys(predBeforeAvg), ...Object.keys(predAfterAvg), ...Object.keys(gtAvg)]);
+      const categories = Array.from(catSet).sort();
+      
+      if (categories.length > 0) {
+        let tableHtml = '<h3>Predictions vs Ground Truth (Current Dataset)</h3>';
+        tableHtml += '<div class="scores-grid-4">';
+        tableHtml += '<div class="label">Category</div><div class="label">Pred. before</div><div class="label">Pred. after</div><div class="label">Ground truth</div>';
+        categories.forEach((cat) => {
+          const beforeVal = predBeforeAvg[cat]?.toFixed(2) ?? '--';
+          const afterVal = predAfterAvg[cat]?.toFixed(2) ?? '--';
+          const gtVal = gtAvg[cat]?.toFixed(2) ?? '--';
+          tableHtml += `<div class="label">${escapeHtml(cat)}</div><div class="value">${beforeVal}</div><div class="value">${afterVal}</div><div class="value">${gtVal}</div>`;
+        });
+        tableHtml += '</div>';
+        datasetPredGtDiv.innerHTML = tableHtml;
+      } else {
+        datasetPredGtDiv.innerHTML = '';
+      }
+    }
+
+
+    /**
+     * Compute a simple diff between two strings by finding the longest common prefix and suffix.
+     * Returns an object with the prefix, the differing part of the old string, the differing part of the new string,
+     * and the suffix. If there is no common prefix or suffix, the entire strings are considered different.
+     * @param {string} oldStr - The original substring from the text.
+     * @param {string} newStr - The suggested replacement substring.
+     * @returns {{commonPrefix: string, oldDiff: string, newDiff: string, commonSuffix: string}}
+     */
+    function computeDiff(oldStr, newStr) {
+      let start = 0;
+      const oldLen = oldStr.length;
+      const newLen = newStr.length;
+      // Find common prefix
+      while (start < oldLen && start < newLen && oldStr[start] === newStr[start]) {
+        start++;
+      }
+      // Find common suffix; ensure we don't overlap prefix
+      let end = 0;
+      while (
+        end < (oldLen - start) &&
+        end < (newLen - start) &&
+        oldStr[oldLen - 1 - end] === newStr[newLen - 1 - end]
+      ) {
+        end++;
+      }
+      const commonPrefix = oldStr.slice(0, start);
+      const commonSuffix = end > 0 ? oldStr.slice(oldLen - end) : '';
+      const oldDiff = oldStr.slice(start, oldLen - end);
+      const newDiff = newStr.slice(start, newLen - end);
+      return { commonPrefix, oldDiff, newDiff, commonSuffix };
+    }
+
+    // Utility: escape HTML to avoid XSS when inserting user content
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.innerText = text;
+      return div.innerHTML;
+    }
+
+    /**
+     * Build a highlighted HTML string from raw text and edits.
+     * This function uses regex searching with word boundaries when appropriate to
+     * avoid matching inside other words. It constructs an array of segments
+     * representing each match and then builds the final HTML without
+     * interfering with previously inserted markup.
+     * @param {string} rawText - The original text.
+     * @param {Array} edits - List of edit objects.
+     * @returns {string} - HTML string with highlighted spans.
+     */
+    function buildHighlightedHtml(rawText, edits) {
+      const segments = [];
+      // Helper to create regex; wrap alphabetic strings with word boundaries
+      function createRegex(str) {
+        const escaped = str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        if (/^[A-Za-z]+$/.test(str)) {
+          return new RegExp('\\b' + escaped + '\\b', 'g');
+        }
+        return new RegExp(escaped, 'g');
+      }
+      // Gather match positions for each edit
+      edits.forEach((edit, idx) => {
+        const searchStr = edit.inappropriate_part;
+        if (!searchStr) return;
+        const regex = createRegex(searchStr);
+        let match;
+        while ((match = regex.exec(rawText)) !== null) {
+          if (match[0].length === 0) break;
+          segments.push({ start: match.index, end: match.index + match[0].length, idx });
+        }
+      });
+      // Sort segments by starting index
+      segments.sort((a, b) => a.start - b.start);
+      // Filter overlapping segments: keep earliest non-overlapping
+      const filtered = [];
+      let lastEnd = -1;
+      segments.forEach((seg) => {
+        if (seg.start >= lastEnd) {
+          filtered.push(seg);
+          lastEnd = seg.end;
+        }
+      });
+      // Build HTML by interleaving plain and highlighted segments
+      let result = '';
+      let pointer = 0;
+      filtered.forEach((seg) => {
+        const plain = rawText.slice(pointer, seg.start);
+        result += escapeHtml(plain);
+        const fragment = rawText.slice(seg.start, seg.end);
+        const edit = edits[seg.idx];
+        const cls = reasonToClass[edit.reason] || 'other-reasons';
+        const diff = edit.diff || computeDiff(edit.inappropriate_part || fragment, edit.rewritten_part || '');
+        // Split the fragment using common prefix and suffix lengths
+        const prefixLen = diff.commonPrefix ? diff.commonPrefix.length : 0;
+        const suffixLen = diff.commonSuffix ? diff.commonSuffix.length : 0;
+        const prefix = fragment.substring(0, prefixLen);
+        const middle = fragment.substring(prefixLen, fragment.length - suffixLen);
+        const suffix = suffixLen > 0 ? fragment.substring(fragment.length - suffixLen) : '';
+        const prefixHtml = escapeHtml(prefix);
+        const diffHtml = `<span class="diff-change" style="color:${colorMap[cls] || '#4285f4'}; font-weight:600;">${escapeHtml(middle)}</span>`;
+        const suffixHtml = escapeHtml(suffix);
+        result += `<span class="highlight ${cls}" data-edit-index="${seg.idx}">${prefixHtml}${diffHtml}${suffixHtml}</span>`;
+        pointer = seg.end;
+      });
+      result += escapeHtml(rawText.slice(pointer));
+      return result;
+    }
+
+    /**
+     * Build a revised HTML string showing diffs (deletions and insertions).
+     * @param {string} rawText - The original text.
+     * @param {Array} edits - List of edit objects to apply (e.g., displayEdits).
+     * @returns {string} - HTML string with <del> and <ins> tags.
+     */
+    function buildDiffedRevisedHtml(rawText, edits) {
+      const segments = [];
+      function createRegex(str) {
+        const escaped = str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        if (/^[A-Za-z]+$/.test(str)) { return new RegExp('\\b' + escaped + '\\b', 'g'); }
+        return new RegExp(escaped, 'g');
+      }
+      edits.forEach((edit) => {
+        const searchStr = edit.inappropriate_part;
+        if (!searchStr) return;
+        const regex = createRegex(searchStr);
+        let match;
+        while ((match = regex.exec(rawText)) !== null) {
+          if (match[0].length === 0) break;
+          segments.push({ start: match.index, end: match.index + match[0].length, edit: edit });
+        }
+      });
+      segments.sort((a, b) => a.start - b.start);
+      const filtered = [];
+      let lastEnd = -1;
+      segments.forEach((seg) => {
+        if (seg.start >= lastEnd) {
+          filtered.push(seg);
+          lastEnd = seg.end;
+        }
+      });
+      let result = '';
+      let pointer = 0;
+      filtered.forEach((seg) => {
+        result += escapeHtml(rawText.slice(pointer, seg.start));
+        const originalPart = rawText.slice(seg.start, seg.end);
+        const newPart = seg.edit.rewritten_part || '';
+        const deletion = originalPart ? `<del>${escapeHtml(originalPart)}</del>` : '';
+        const insertion = newPart ? `<ins>${escapeHtml(newPart)}</ins>` : '';
+        const separator = deletion && insertion ? ' ' : '';
+        result += `${deletion}${separator}${insertion}`;
+        pointer = seg.end;
+      });
+      result += escapeHtml(rawText.slice(pointer));
+      return result;
+    }
+
+    /**
+     * Build a revised HTML string by applying all edits and highlighting the replacements.
+     * @param {string} rawText - The original text.
+     * @param {Array} edits - List of all edit objects.
+     * @returns {string} - HTML string with highlighted replacements.
+     */
+    function buildRevisedHighlightedHtml(rawText, edits) {
+      const segments = [];
+      function createRegex(str) {
+        const escaped = str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        if (/^[A-Za-z]+$/.test(str)) {
+          return new RegExp('\\b' + escaped + '\\b', 'g');
+        }
+        return new RegExp(escaped, 'g');
+      }
+      edits.forEach((edit) => {
+        const searchStr = edit.inappropriate_part;
+        if (!searchStr) return;
+        const regex = createRegex(searchStr);
+        let match;
+        while ((match = regex.exec(rawText)) !== null) {
+          if (match[0].length === 0) break;
+          segments.push({ start: match.index, end: match.index + match[0].length, edit: edit });
+        }
+      });
+      segments.sort((a, b) => a.start - b.start);
+      const filtered = [];
+      let lastEnd = -1;
+      segments.forEach((seg) => {
+        if (seg.start >= lastEnd) {
+          filtered.push(seg);
+          lastEnd = seg.end;
+        }
+      });
+      let result = '';
+      let pointer = 0;
+      filtered.forEach((seg) => {
+        const plain = rawText.slice(pointer, seg.start);
+        result += escapeHtml(plain);
+        const edit = seg.edit;
+        const cls = reasonToClass[edit.reason] || 'other-reasons';
+        const rewrittenPart = edit.rewritten_part || '';
+        result += `<span class="revised-highlight ${cls}">${escapeHtml(rewrittenPart)}</span>`;
+        pointer = seg.end;
+      });
+      result += escapeHtml(rawText.slice(pointer));
+      return result;
+    }
+
+    // Populate the fields on page load
+    document.getElementById('text-input').value = defaultText;
+    document.getElementById('json-input').value = defaultJSON;
+
+    // Main function: parse input, highlight text, and show revisions
+    function applyEdits() {
+      const text = document.getElementById('text-input').value;
+      let edits;
+      // Parse the JSON safely
+      try {
+        const obj = JSON.parse(document.getElementById('json-input').value);
+        edits = Array.isArray(obj.edits) ? obj.edits : [];
+      } catch (e) {
+        alert('Invalid JSON: ' + e.message);
+        return;
+      }
+
+      // Filter edits to only include those that are valid and have a perfect reward score of 1
+      const allEdits = edits;
+      const displayEdits = allEdits.filter((edit) => {
+        return edit && edit.valid === true && edit.rewards && Number(edit.rewards.perfect) === 1;
+      });
+      // Extract other valid edits that do not meet the perfect=1 criteria (valid but perfect != 1)
+      const otherValidEdits = allEdits.filter((edit) => {
+        return edit && edit.valid === true && edit.rewards && Number(edit.rewards.perfect) !== 1;
+      });
+      // Compute diffs for other valid edits
+      otherValidEdits.forEach(edit => {
+        if (typeof edit.inappropriate_part === 'string' && typeof edit.rewritten_part === 'string') {
+          edit.diff = computeDiff(edit.inappropriate_part, edit.rewritten_part);
+        } else {
+          edit.diff = { commonPrefix: '', oldDiff: edit.inappropriate_part || '', newDiff: edit.rewritten_part || '', commonSuffix: '' };
+        }
+      });
+      // Sort display edits by decreasing length of the inappropriate part for processing order
+      displayEdits.sort((a, b) => (b.inappropriate_part || '').length - (a.inappropriate_part || '').length);
+      // Compute diffs for display edits
+      displayEdits.forEach(edit => {
+        if (typeof edit.inappropriate_part === 'string' && typeof edit.rewritten_part === 'string') {
+          edit.diff = computeDiff(edit.inappropriate_part, edit.rewritten_part);
+        } else {
+          edit.diff = { commonPrefix: '', oldDiff: edit.inappropriate_part || '', newDiff: edit.rewritten_part || '', commonSuffix: '' };
+        }
+      });
+
+      // Render original text with underlines on parts to be changed
+      const highlightedHtml = buildHighlightedHtml(text, displayEdits);
+      document.getElementById('original-display').innerHTML = highlightedHtml;
+
+      // Render revised text showing diffs (<del> and <ins>) for valid, perfect=1 edits
+      const revisedDiffHtml = buildDiffedRevisedHtml(text, displayEdits);
+      document.getElementById('revised-display').innerHTML = revisedDiffHtml;
+
+      // Render revised text with ALL edits applied and highlighted
+      const allEditsSorted = [...allEdits].sort((a, b) => (b.inappropriate_part || '').length - (a.inappropriate_part || '').length);
+      const revisedHighlightedHtml = buildRevisedHighlightedHtml(text, allEditsSorted);
+      document.getElementById('revised-display-all-edits').innerHTML = revisedHighlightedHtml;
+
+      // Attach event listeners to highlight spans for the filtered edits
+      attachHighlights(displayEdits);
+      // Render the edits list only with the filtered edits
+      renderEditsList(displayEdits);
+      // Render other valid edits list (those with overall != 1)
+      renderOtherEditsList(otherValidEdits);
+      // Update statistics for this example
+      updateStatistics(displayEdits, allEdits);
+    }
+
+    // Attach click events on highlighted spans to show tooltips with the suggestion
+    function attachHighlights(edits) {
+      const highlights = document.querySelectorAll('.highlight');
+      highlights.forEach((span) => {
+        span.addEventListener('click', function (e) {
+          e.stopPropagation();
+          removeExistingTooltips();
+          const idx = parseInt(span.getAttribute('data-edit-index'), 10);
+          const edit = edits[idx];
+          if (!edit) return;
+          const tooltip = document.createElement('div');
+          tooltip.className = 'tooltip';
+          const title = document.createElement('h4');
+          title.textContent = edit.reason;
+          const current = document.createElement('p');
+          const suggestion = document.createElement('p');
+          // Build diff display for tooltip
+          const cls = reasonToClass[edit.reason] || 'other-reasons';
+          const color = colorMap[cls] || '#4285f4';
+          const diff = edit.diff || computeDiff(edit.inappropriate_part || '', edit.rewritten_part || '');
+          const buildDiffHtml = (commonPrefix, diffPart, commonSuffix) => {
+            const prefixEsc = escapeHtml(commonPrefix || '');
+            const diffEsc = escapeHtml(diffPart || '');
+            const suffixEsc = escapeHtml(commonSuffix || '');
+            return `${prefixEsc}<span class="diff-change" style="color:${color}; font-weight:600;">${diffEsc}</span>${suffixEsc}`;
+          };
+          const oldHtml = buildDiffHtml(diff.commonPrefix, diff.oldDiff, diff.commonSuffix);
+          const newHtml = buildDiffHtml(diff.commonPrefix, diff.newDiff, diff.commonSuffix);
+          current.innerHTML = `<strong>Current:</strong> ${oldHtml}`;
+          suggestion.innerHTML = `<strong>Suggestion:</strong> ${newHtml}`;
+          tooltip.appendChild(title);
+          tooltip.appendChild(current);
+          tooltip.appendChild(suggestion);
+          document.body.appendChild(tooltip);
+          // Position the tooltip below the clicked span
+          const rect = span.getBoundingClientRect();
+          const top = window.scrollY + rect.bottom + 5;
+          const left = window.scrollX + rect.left;
+          tooltip.style.top = `${top}px`;
+          tooltip.style.left = `${left}px`;
+          tooltip.style.display = 'block';
+        });
+      });
+      // Remove tooltips when clicking anywhere else
+      document.addEventListener('click', removeExistingTooltips, { once: true });
+    }
+
+    /**
+     * Populate the edits list panel with all edits, allowing users to quickly see every suggestion.
+     * Clicking an item will scroll the corresponding highlighted text into view and briefly emphasize it.
+     * @param {Array} edits
+     */
+    function renderEditsList(edits) {
+      const listContainer = document.getElementById('edits-list');
+      listContainer.innerHTML = '';
+      if (!edits || edits.length === 0) {
+        const msg = document.createElement('div');
+        msg.textContent = 'No perfect edits for this example.';
+        msg.style.fontStyle = 'italic';
+        msg.style.color = '#666';
+        listContainer.appendChild(msg);
+        return;
+      }
+      edits.forEach((edit, idx) => {
+        const item = document.createElement('div');
+        item.className = 'edit-item';
+        item.dataset.index = idx;
+        const cls = reasonToClass[edit.reason] || 'other-reasons';
+        // Map classes to colors for the dot indicator
+        const colorMap = {
+          'missing-intelligibility': '#f4b400',
+          'toxic-emotions': '#d93025',
+          'other-reasons': '#1a73e8',
+          'missing-commitment': '#188038'
+        };
+        const dot = document.createElement('span');
+        dot.style.width = '16px';
+        dot.style.height = '16px';
+        dot.style.flexShrink = '0';
+        // Insert an icon SVG corresponding to the edit type to mimic Grammarly's suggestion icons
+        let svgMarkup = '';
+        if (cls === 'missing-intelligibility') {
+          svgMarkup = `<svg width="16" height="16" viewBox="0 0 24 24" fill="${colorMap[cls]}" xmlns="http://www.w3.org/2000/svg"><path d="M9 21h6v-2H9v2zm3-19C7.935 2 4 5.935 4 11a7 7 0 004 6.324V19a1 1 0 001.447.894L12 18.764l2.553 1.13A1 1 0 0016 19v-1.676A7 7 0 0020 11c0-5.065-3.935-9-9-9z"></path></svg>`;
+        } else if (cls === 'toxic-emotions') {
+          svgMarkup = `<svg width="16" height="16" viewBox="0 0 24 24" fill="${colorMap[cls]}" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.486 2 2 6.486 2 12s4.486 10 10 10 10-4.486 10-10S17.514 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>`;
+        } else if (cls === 'missing-commitment') {
+          svgMarkup = `<svg width="16" height="16" viewBox="0 0 24 24" fill="${colorMap[cls]}" xmlns="http://www.w3.org/2000/svg"><path d="M12 2a10 10 0 1010 10A10.011 10.011 0 0012 2zm-1 15l-5-5 1.414-1.414L11 14.172l7.586-7.586L20 8l-9 9z"/></svg>`;
+        } else {
+          svgMarkup = `<svg width="16" height="16" viewBox="0 0 24 24" fill="${colorMap[cls] || '#1a73e8'}" xmlns="http://www.w3.org/2000/svg"><path d="M3 17.25V21h3.75l11.06-11.06-3.75-3.75L3 17.25zm2 1.5h-.836L14.294 8.62l.836.836L5 18.75zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>`;
+        }
+        dot.innerHTML = svgMarkup;
+        const textContainer = document.createElement('div');
+        textContainer.style.flex = '1';
+        // Build content: reason and short snippet
+        const title = document.createElement('div');
+        title.style.fontWeight = '600';
+        title.style.marginBottom = '2px';
+        title.textContent = edit.reason;
+        const current = document.createElement('div');
+        current.style.marginBottom = '2px';
+        const suggestion = document.createElement('div');
+        suggestion.style.color = '#555';
+        suggestion.style.fontSize = '12px';
+        // Construct diff contexts for display
+        const diff = edit.diff || computeDiff(edit.inappropriate_part || '', edit.rewritten_part || '');
+        const clsColor = colorMap[cls] || '#4285f4';
+        const buildDiffHtml = (commonPrefix, diffPart, commonSuffix) => {
+          const prefixEsc = escapeHtml(commonPrefix);
+          const diffEsc = escapeHtml(diffPart);
+          const suffixEsc = escapeHtml(commonSuffix);
+          return `${prefixEsc}<span class="diff-change" style="color:${clsColor}; font-weight:600;">${diffEsc}</span>${suffixEsc}`;
+        };
+        const oldHtml = buildDiffHtml(diff.commonPrefix || '', diff.oldDiff || '', diff.commonSuffix || '');
+        const newHtml = buildDiffHtml(diff.commonPrefix || '', diff.newDiff || '', diff.commonSuffix || '');
+        current.innerHTML = `→ ${oldHtml}`;
+        suggestion.innerHTML = `⇢ ${newHtml}`;
+        textContainer.appendChild(title);
+        textContainer.appendChild(current);
+        textContainer.appendChild(suggestion);
+        // Append meta information about validity and rewards if available, highlighting values not equal to 1
+        const meta = document.createElement('div');
+        meta.style.color = '#777';
+        meta.style.fontSize = '12px';
+        meta.style.marginTop = '2px';
+        let metaHtml = '';
+        if (typeof edit.valid !== 'undefined') {
+          metaHtml += `Valid: ${edit.valid}`;
+        }
+        if (edit.rewards) {
+          const parts = [];
+          // List of keys to display in order
+          const keys = ['semantic_similarity', 'fluency', 'human_like', 'app', 'perfect'];
+          keys.forEach((key) => {
+            if (edit.rewards.hasOwnProperty(key)) {
+              const val = Number(edit.rewards[key]);
+              const formatted = typeof val === 'number' ? val.toFixed(2) : edit.rewards[key];
+              if (val !== 1) {
+                parts.push(`${key}: <span style="color:#d93025; font-weight:600;">${formatted}</span>`);
+              } else {
+                parts.push(`${key}: ${formatted}`);
+              }
+            }
+          });
+          if (parts.length > 0) metaHtml += (metaHtml ? ' • ' : '') + `Scores: ${parts.join(', ')}`;
+        }
+        // Add reason correctness information
+        if (typeof edit.reason_correct !== 'undefined') {
+          const reasonCorrectColor = edit.reason_correct ? '#188038' : '#d93025';
+          const reasonCorrectText = edit.reason_correct ? 'correct' : 'incorrect';
+          metaHtml += (metaHtml ? ' • ' : '') + `Reason: <span style="color:${reasonCorrectColor}; font-weight:600;">${reasonCorrectText}</span>`;
+          if (edit.classifier_true_reason && !edit.reason_correct) {
+            metaHtml += ` (should be: ${escapeHtml(edit.classifier_true_reason)})`;
+          }
+        }
+        meta.innerHTML = metaHtml;
+        if (metaHtml) textContainer.appendChild(meta);
+        item.appendChild(dot);
+        item.appendChild(textContainer);
+        // Click event: scroll to highlight
+        item.addEventListener('click', () => {
+          const targetSpan = document.querySelector(`.highlight[data-edit-index='${idx}']`);
+          if (targetSpan) {
+            targetSpan.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            targetSpan.style.boxShadow = '0 0 0 3px rgba(95, 140, 244, 0.4)';
+            setTimeout(() => {
+              targetSpan.style.boxShadow = '';
+            }, 800);
+          }
+        });
+        listContainer.appendChild(item);
+      });
+    }
+
+    /**
+     * Render a list of other valid edits that do not have a perfect reward score of 1. These
+     * edits are still valid, but their perfect score is less than 1. For each edit, show the
+     * reason, a diff between the inappropriate and rewritten parts, and the reward metrics,
+     * highlighting any score that is not equal to 1.
+     * @param {Array} edits
+     */
+    function renderOtherEditsList(edits) {
+      const container = document.getElementById('other-edits-list');
+      if (!container) return;
+      container.innerHTML = '';
+      if (!edits || edits.length === 0) {
+        const msg = document.createElement('div');
+        msg.textContent = 'No other valid edits for this example.';
+        msg.style.fontStyle = 'italic';
+        msg.style.color = '#666';
+        container.appendChild(msg);
+        return;
+      }
+      edits.forEach((edit, idx) => {
+        const item = document.createElement('div');
+        item.className = 'edit-item';
+        item.dataset.index = idx;
+        const cls = reasonToClass[edit.reason] || 'other-reasons';
+        // Dot indicator (reuse color map from renderEditsList)
+        const localColorMap = {
+          'missing-intelligibility': '#f4b400',
+          'toxic-emotions': '#d93025',
+          'other-reasons': '#1a73e8',
+          'missing-commitment': '#188038'
+        };
+        const dot = document.createElement('span');
+        dot.style.width = '16px';
+        dot.style.height = '16px';
+        dot.style.flexShrink = '0';
+        let svgMarkup = '';
+        if (cls === 'missing-intelligibility') {
+          svgMarkup = `<svg width="16" height="16" viewBox="0 0 24 24" fill="${localColorMap[cls]}" xmlns="http://www.w3.org/2000/svg"><path d="M9 21h6v-2H9v2zm3-19C7.935 2 4 5.935 4 11a7 7 0 004 6.324V19a1 1 0 001.447.894L12 18.764l2.553 1.13A1 1 0 0016 19v-1.676A7 7 0 0020 11c0-5.065-3.935-9-9-9z"></path></svg>`;
+        } else if (cls === 'toxic-emotions') {
+          svgMarkup = `<svg width="16" height="16" viewBox="0 0 24 24" fill="${localColorMap[cls]}" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.486 2 2 6.486 2 12s4.486 10 10 10 10-4.486 10-10S17.514 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>`;
+        } else if (cls === 'missing-commitment') {
+          svgMarkup = `<svg width="16" height="16" viewBox="0 0 24 24" fill="${localColorMap[cls]}" xmlns="http://www.w3.org/2000/svg"><path d="M12 2a10 10 0 1010 10A10.011 10.011 0 0012 2zm-1 15l-5-5 1.414-1.414L11 14.172l7.586-7.586L20 8l-9 9z"/></svg>`;
+        } else {
+          svgMarkup = `<svg width="16" height="16" viewBox="0 0 24 24" fill="${localColorMap[cls] || '#1a73e8'}" xmlns="http://www.w3.org/2000/svg"><path d="M3 17.25V21h3.75l11.06-11.06-3.75-3.75L3 17.25zm2 1.5h-.836L14.294 8.62l.836.836L5 18.75zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>`;
+        }
+        dot.innerHTML = svgMarkup;
+        const textContainer = document.createElement('div');
+        textContainer.style.flex = '1';
+        const title = document.createElement('div');
+        title.style.fontWeight = '600';
+        title.style.marginBottom = '2px';
+        title.textContent = edit.reason;
+        const current = document.createElement('div');
+        current.style.marginBottom = '2px';
+        const suggestion = document.createElement('div');
+        suggestion.style.color = '#555';
+        suggestion.style.fontSize = '12px';
+        // Compute diff for this edit
+        const diff = edit.diff || computeDiff(edit.inappropriate_part || '', edit.rewritten_part || '');
+        const clsColor = localColorMap[cls] || '#1a73e8';
+        const buildDiffHtml = (commonPrefix, diffPart, commonSuffix) => {
+          const prefixEsc = escapeHtml(commonPrefix);
+          const diffEsc = escapeHtml(diffPart);
+          const suffixEsc = escapeHtml(commonSuffix);
+          return `${prefixEsc}<span class="diff-change" style="color:${clsColor}; font-weight:600;">${diffEsc}</span>${suffixEsc}`;
+        };
+        const oldHtml = buildDiffHtml(diff.commonPrefix || '', diff.oldDiff || '', diff.commonSuffix || '');
+        const newHtml = buildDiffHtml(diff.commonPrefix || '', diff.newDiff || '', diff.commonSuffix || '');
+        current.innerHTML = `→ ${oldHtml}`;
+        suggestion.innerHTML = `⇢ ${newHtml}`;
+        textContainer.appendChild(title);
+        textContainer.appendChild(current);
+        textContainer.appendChild(suggestion);
+        // Meta info: show validity and reward scores; highlight scores != 1
+        const meta = document.createElement('div');
+        meta.style.color = '#777';
+        meta.style.fontSize = '12px';
+        meta.style.marginTop = '2px';
+        let metaHtml = '';
+        if (typeof edit.valid !== 'undefined') {
+          metaHtml += `Valid: ${edit.valid}`;
+        }
+        if (edit.rewards) {
+          const parts = [];
+          for (const key of ['semantic_similarity', 'fluency', 'human_like', 'app', 'perfect']) {
+            if (edit.rewards.hasOwnProperty(key)) {
+              const val = Number(edit.rewards[key]);
+              const formatted = typeof val === 'number' ? val.toFixed(2) : edit.rewards[key];
+              // Highlight values not equal to 1
+              if (val !== 1) {
+                parts.push(`${key}: <span style="color:#d93025; font-weight:600;">${formatted}</span>`);
+              } else {
+                parts.push(`${key}: ${formatted}`);
+              }
+            }
+          }
+          if (parts.length > 0) metaHtml += (metaHtml ? ' • ' : '') + `Scores: ${parts.join(', ')}`;
+        }
+        // Add reason correctness information
+        if (typeof edit.reason_correct !== 'undefined') {
+          const reasonCorrectColor = edit.reason_correct ? '#188038' : '#d93025';
+          const reasonCorrectText = edit.reason_correct ? 'correct' : 'incorrect';
+          metaHtml += (metaHtml ? ' • ' : '') + `Reason: <span style="color:${reasonCorrectColor}; font-weight:600;">${reasonCorrectText}</span>`;
+          if (edit.classifier_true_reason && !edit.reason_correct) {
+            metaHtml += ` (should be: ${escapeHtml(edit.classifier_true_reason)})`;
+          }
+        }
+        meta.innerHTML = metaHtml;
+        if (metaHtml) textContainer.appendChild(meta);
+        item.appendChild(dot);
+        item.appendChild(textContainer);
+        // Click event: scroll to highlight if exists (only for edits displayed?)
+        item.addEventListener('click', () => {
+          // attempt to scroll to the original highlight if exists; these edits might not be highlighted
+          const spans = document.querySelectorAll('.highlight');
+          // find span whose text matches inappropriate_part
+          let target = null;
+          spans.forEach((sp) => {
+            if (!target && sp.textContent.includes(edit.inappropriate_part)) {
+              target = sp;
+            }
+          });
+          if (target) {
+            target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            target.style.boxShadow = '0 0 0 3px rgba(95, 140, 244, 0.4)';
+            setTimeout(() => {
+              target.style.boxShadow = '';
+            }, 800);
+          }
+        });
+        container.appendChild(item);
+      });
+    }
+
+    // Remove any existing tooltip elements from the document
+    function removeExistingTooltips() {
+      document.querySelectorAll('.tooltip').forEach((tip) => tip.remove());
+    }
+
+    /**
+     * Compute and display statistics about the edits and their score values. Displays total number of edits,
+     * number of valid edits, number of displayed edits (valid with overall score of 1), average score metrics
+     * across all edits and displayed edits, and counts of displayed edits by reason category.
+     * @param {Array} displayEdits - The filtered edits currently displayed (valid & overall=1)
+     * @param {Array} allEdits - All edits parsed from the JSON input
+     */
+    function updateStatistics(displayEdits, allEdits) {
+      const panel = document.getElementById('statistics-panel');
+      if (!panel) return;
+      // Update the dataset overview on each statistics computation. This ensures
+      // that dataset-level charts and summary remain current after loading a file.
+      renderDatasetOverview();
+
+      // Total number of edits in the example
+      const total = allEdits ? allEdits.length : 0;
+      // Number of valid edits in the example
+      const validCount = (allEdits || []).filter(e => e && e.valid === true).length;
+      // Number of edits being displayed (valid and perfect=1)
+      const displayedCount = displayEdits ? displayEdits.length : 0;
+      // Helper to calculate average scores for a set of edits
+      function averageScores(editsArray) {
+        const sums = { semantic_similarity: 0, fluency: 0, human_like: 0, perfect: 0 };
+        let count = 0;
+        (editsArray || []).forEach(e => {
+          if (e && e.rewards) {
+            sums.semantic_similarity += Number(e.rewards.semantic_similarity) || 0;
+            sums.fluency += Number(e.rewards.fluency) || 0;
+            sums.human_like += Number(e.rewards.human_like) || 0;
+            sums.perfect += Number(e.rewards.perfect) || 0;
+            count++;
+          }
+        });
+        if (count === 0) return { semantic_similarity: 0, fluency: 0, human_like: 0, perfect: 0 };
+        return {
+          semantic_similarity: sums.semantic_similarity / count,
+          fluency: sums.fluency / count,
+          human_like: sums.human_like / count,
+          perfect: sums.perfect / count
+        };
+      }
+      const avgAll = averageScores(allEdits || []);
+      const avgDisplayed = averageScores(displayEdits || []);
+      // Count displayed edits by reason
+      const reasonCounts = {};
+      (displayEdits || []).forEach(e => {
+        if (e && e.reason) {
+          reasonCounts[e.reason] = (reasonCounts[e.reason] || 0) + 1;
+        }
+      });
+      const reasonStrings = Object.keys(reasonCounts).map(key => `${key}: ${reasonCounts[key]}`).join(', ');
+      // Build HTML for statistics using structured sections and grids for improved aesthetics
+      const html = [];
+      // We intentionally omit rendering dataset-level summaries inside the statistics panel.
+      // Example summary section
+      html.push('<div class="stats-section">');
+      html.push('<h4>Example Summary</h4>');
+      html.push('<div class="stats-grid">');
+      html.push(`<div class="label">Total edits</div><div class="value">${total}</div>`);
+      html.push(`<div class="label">Valid edits</div><div class="value">${validCount}</div>`);
+      html.push(`<div class="label">Perfect edits</div><div class="value">${displayedCount}</div>`);
+      html.push(`<div class="label">Avg scores (all edits)</div><div class="value">SS ${avgAll.semantic_similarity.toFixed(2)}, FL ${avgAll.fluency.toFixed(2)}, HL ${avgAll.human_like.toFixed(2)}, PF ${avgAll.perfect.toFixed(2)}</div>`);
+      html.push(`<div class="label">Perfect edits by reason</div><div class="value">${escapeHtml(reasonStrings || 'None')}</div>`);
+      html.push('</div>');
+      html.push('</div>');
+      // Example scores / metrics / ground truth sections
+      if (currentExample) {
+        // Extract prediction fields and metrics/ground truth
+        const predBefore = currentExample.predicted_scores_before || {};
+        const predAfter = currentExample.predicted_scores_after || {};
+        const pred = currentExample.predicted_scores || {};
+        const metrics = currentExample.metrics || {};
+        const gt = currentExample.ground_truth_scores || {};
+        const gtKeys = Object.keys(gt);
+        const predBeforeKeys = Object.keys(predBefore);
+        const predAfterKeys = Object.keys(predAfter);
+        const predKeys = Object.keys(pred);
+        // Predictions vs ground truth section
+        if (predBeforeKeys.length > 0 || predAfterKeys.length > 0) {
+          // Show a four-column grid: category, pred before, pred after, ground truth
+          const categories = Array.from(new Set([...predBeforeKeys, ...predAfterKeys, ...gtKeys])).sort();
+          html.push('<div class="stats-section">');
+          html.push('<h4>Example Predictions vs Ground Truth</h4>');
+          html.push('<div class="scores-grid-4">');
+          html.push('<div class="label">Category</div><div class="label">Pred. before</div><div class="label">Pred. after</div><div class="label">Ground truth</div>');
+          categories.forEach((cat) => {
+            const beforeVal = predBefore.hasOwnProperty(cat) ? Number(predBefore[cat]).toFixed(2) : '--';
+            const afterVal = predAfter.hasOwnProperty(cat) ? Number(predAfter[cat]).toFixed(2) : '--';
+            const gtVal = gt.hasOwnProperty(cat) ? Number(gt[cat]).toFixed(2) : '--';
+            html.push(`<div class="label">${escapeHtml(cat)}</div><div class="value">${beforeVal}</div><div class="value">${afterVal}</div><div class="value">${gtVal}</div>`);
+          });
+          html.push('</div>');
+          html.push('</div>');
+        } else if (predKeys.length > 0) {
+          // Legacy single prediction vs ground truth (three columns)
+          const categories = Array.from(new Set([...predKeys, ...gtKeys])).sort();
+          html.push('<div class="stats-section">');
+          html.push('<h4>Example Predicted vs Ground Truth</h4>');
+          html.push('<div class="scores-grid">');
+          html.push('<div class="label">Category</div><div class="label">Predicted</div><div class="label">Ground truth</div>');
+          categories.forEach((cat) => {
+            const predVal = pred.hasOwnProperty(cat) ? Number(pred[cat]).toFixed(2) : '--';
+            const gtVal = gt.hasOwnProperty(cat) ? Number(gt[cat]).toFixed(2) : '--';
+            html.push(`<div class="label">${escapeHtml(cat)}</div><div class="value">${predVal}</div><div class="value">${gtVal}</div>`);
+          });
+          html.push('</div>');
+          html.push('</div>');
+        } else if (gtKeys.length > 0) {
+          // Only ground truth available
+          html.push('<div class="stats-section">');
+          html.push('<h4>Example Ground Truth</h4>');
+          html.push('<div class="two-col-grid">');
+          html.push('<div class="label">Category</div><div class="label">Value</div>');
+          gtKeys.sort().forEach((cat) => {
+            const val = Number(gt[cat]);
+            html.push(`<div class="label">${escapeHtml(cat)}</div><div class="value">${val.toFixed(2)}</div>`);
+          });
+          html.push('</div>');
+          html.push('</div>');
+        }
+        // Metrics section (if metrics present)
+        const metricKeys = Object.keys(metrics);
+        if (metricKeys.length > 0) {
+          html.push('<div class="stats-section">');
+          html.push('<h4>Example Metrics</h4>');
+          html.push('<div class="two-col-grid">');
+          html.push('<div class="label">Metric</div><div class="label">Value</div>');
+          metricKeys.sort().forEach((metric) => {
+            const val = Number(metrics[metric]);
+            html.push(`<div class="label">${escapeHtml(metric)}</div><div class="value">${val.toFixed(2)}</div>`);
+          });
+          html.push('</div>');
+          html.push('</div>');
+        }
+      }
+      panel.innerHTML = html.join('');
+    }
+
+    /**
+     * Load and parse a JSONL file selected via file input. Each line should be a valid JSON object
+     * describing an example with an issue, argument, and edits array. After parsing, generate
+     * navigation buttons and automatically load the first example.
+     */
+    document.getElementById('file-input').addEventListener('change', function (e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function (event) {
+        const text = event.target.result;
+        const lines = text.split(/\r?\n/).filter((ln) => ln.trim() !== '');
+        // Build a new dataset entry
+        const dataset = {
+          fileName: file.name || `Dataset ${datasets.length + 1}`,
+          examples: [],
+          datasetStats: {
+            totalExamples: 0,
+            totalEdits: 0,
+            validEdits: 0,
+            validPerfectEdits: 0,
+            reasonCorrectEdits: 0,
+            rewardSums: { semantic_similarity: 0, fluency: 0, human_like: 0, perfect: 0 },
+            validPerfectRewardSums: { semantic_similarity: 0, fluency: 0, human_like: 0, perfect: 0 },
+            predictedSums: {},
+            predictedBeforeSums: {},
+            predictedAfterSums: {},
+            metricsSums: {},
+            groundTruthSums: {}
+          }
+        };
+        lines.forEach((line, idx) => {
+          try {
+            const obj = JSON.parse(line);
+            if (obj && obj.argument && Array.isArray(obj.edits)) {
+              dataset.examples.push(obj);
+              // Update dataset statistics for this example
+              dataset.datasetStats.totalExamples += 1;
+              obj.edits.forEach((ed) => {
+                dataset.datasetStats.totalEdits += 1;
+                if (ed && ed.valid === true) {
+                  dataset.datasetStats.validEdits += 1;
+                  if (ed.rewards) {
+                    dataset.datasetStats.rewardSums.semantic_similarity += Number(ed.rewards.semantic_similarity) || 0;
+                    dataset.datasetStats.rewardSums.fluency += Number(ed.rewards.fluency) || 0;
+                    dataset.datasetStats.rewardSums.human_like += Number(ed.rewards.human_like) || 0;
+                    dataset.datasetStats.rewardSums.perfect += Number(ed.rewards.perfect) || 0;
+                  }
+                  if (ed.rewards && Number(ed.rewards.perfect) === 1) {
+                    dataset.datasetStats.validPerfectEdits += 1;
+                    dataset.datasetStats.validPerfectRewardSums.semantic_similarity += Number(ed.rewards.semantic_similarity) || 0;
+                    dataset.datasetStats.validPerfectRewardSums.fluency += Number(ed.rewards.fluency) || 0;
+                    dataset.datasetStats.validPerfectRewardSums.human_like += Number(ed.rewards.human_like) || 0;
+                    dataset.datasetStats.validPerfectRewardSums.perfect += Number(ed.rewards.perfect) || 0;
+                  }
+                }
+                // Track reason correctness
+                if (ed && ed.reason_correct === true) {
+                  dataset.datasetStats.reasonCorrectEdits += 1;
+                }
+              });
+              // Accumulate predicted scores (legacy single prediction field)
+              if (obj.predicted_scores && typeof obj.predicted_scores === 'object') {
+                for (const [key, val] of Object.entries(obj.predicted_scores)) {
+                  dataset.datasetStats.predictedSums[key] = (dataset.datasetStats.predictedSums[key] || 0) + Number(val || 0);
+                }
+              }
+              // Accumulate predicted scores before edits
+              if (obj.predicted_scores_before && typeof obj.predicted_scores_before === 'object') {
+                for (const [key, val] of Object.entries(obj.predicted_scores_before)) {
+                  dataset.datasetStats.predictedBeforeSums[key] = (dataset.datasetStats.predictedBeforeSums[key] || 0) + Number(val || 0);
+                }
+              }
+              // Accumulate predicted scores after edits
+              if (obj.predicted_scores_after && typeof obj.predicted_scores_after === 'object') {
+                for (const [key, val] of Object.entries(obj.predicted_scores_after)) {
+                  dataset.datasetStats.predictedAfterSums[key] = (dataset.datasetStats.predictedAfterSums[key] || 0) + Number(val || 0);
+                }
+              }
+              // Accumulate metrics if provided (alternative to predicted scores)
+              if (obj.metrics && typeof obj.metrics === 'object') {
+                for (const [key, val] of Object.entries(obj.metrics)) {
+                  dataset.datasetStats.metricsSums[key] = (dataset.datasetStats.metricsSums[key] || 0) + Number(val || 0);
+                }
+              }
+              if (obj.ground_truth_scores && typeof obj.ground_truth_scores === 'object') {
+                for (const [key, val] of Object.entries(obj.ground_truth_scores)) {
+                  dataset.datasetStats.groundTruthSums[key] = (dataset.datasetStats.groundTruthSums[key] || 0) + Number(val || 0);
+                }
+              }
+            }
+          } catch (err) {
+            console.error('Error parsing JSONL line', idx + 1, err);
+          }
+        });
+        
+        // Calculate and store the average of example-mean-rewards
+        const perExampleRewardMeans = [];
+        dataset.examples.forEach(example => {
+            const allEditsInExample = example.edits;
+            if (allEditsInExample && allEditsInExample.length > 0) {
+                const rewardSumsInExample = { semantic_similarity: 0, fluency: 0, human_like: 0, app: 0, perfect: 0 };
+                allEditsInExample.forEach(edit => {
+                    if (edit.rewards) {
+                        rewardSumsInExample.semantic_similarity += Number(edit.rewards.semantic_similarity) || 0;
+                        rewardSumsInExample.fluency += Number(edit.rewards.fluency) || 0;
+                        rewardSumsInExample.human_like += Number(edit.rewards.human_like) || 0;
+                        rewardSumsInExample.app += Number(edit.rewards.app) || 0;
+                        rewardSumsInExample.perfect += Number(edit.rewards.perfect) || 0;
+                    }
+                });
+                const rewardMeansInExample = {};
+                for (const key in rewardSumsInExample) {
+                  rewardMeansInExample[key] = rewardSumsInExample[key] / allEditsInExample.length;
+                }
+                perExampleRewardMeans.push(rewardMeansInExample);
+            }
+        });
+
+        const finalRewardAverages = { semantic_similarity: 0, fluency: 0, human_like: 0, app: 0, perfect: 0 };
+        if (perExampleRewardMeans.length > 0) {
+            perExampleRewardMeans.forEach(means => {
+              for (const key in finalRewardAverages) {
+                finalRewardAverages[key] += means[key] || 0;
+              }
+            });
+            for (const key in finalRewardAverages) {
+                finalRewardAverages[key] /= perExampleRewardMeans.length;
+            }
+        }
+        dataset.datasetStats.rewardAverages = finalRewardAverages;
+
+        // Add dataset and switch to it
+        datasets.push(dataset);
+        currentDatasetIndex = datasets.length - 1;
+        datasetStats = dataset.datasetStats;
+        examples = dataset.examples;
+        renderDatasetTabs();
+        switchDataset(currentDatasetIndex);
+      };
+      reader.readAsText(file);
+    });
+
+    /**
+     * Generate navigation buttons for each example loaded from the JSONL file. Clicking a button
+     * will load the corresponding example into the editor.
+     */
+    function generateExampleButtons() {
+      const container = document.getElementById('example-buttons');
+      container.innerHTML = '';
+      examples.forEach((ex, idx) => {
+        const btn = document.createElement('button');
+        btn.textContent = `Example ${idx + 1}`;
+        btn.className = currentExampleIndex === idx ? 'active' : '';
+        btn.addEventListener('click', () => {
+          loadExample(idx);
+        });
+        container.appendChild(btn);
+      });
+    }
+
+    /**
+     * Render tabs for each loaded dataset. When more than one dataset is present,
+     * the tab bar becomes visible and allows switching between them.
+     */
+    function renderDatasetTabs() {
+      const tabsContainer = document.getElementById('dataset-tabs');
+      if (!tabsContainer) return;
+      if (!datasets || datasets.length <= 1) {
+        tabsContainer.style.display = 'none';
+        return;
+      }
+      tabsContainer.style.display = 'flex';
+      tabsContainer.innerHTML = '';
+      datasets.forEach((ds, idx) => {
+        const btn = document.createElement('button');
+        btn.textContent = ds.fileName || `Dataset ${idx + 1}`;
+        if (idx === currentDatasetIndex) {
+          btn.classList.add('active');
+        }
+        btn.addEventListener('click', () => {
+          switchDataset(idx);
+        });
+        tabsContainer.appendChild(btn);
+      });
+    }
+
+    /**
+     * Switch to a dataset by index. Updates global references, regenerates example
+     * buttons, loads the first example, and redraws the dataset overview.
+     * @param {number} index
+     */
+    function switchDataset(index) {
+      if (!datasets || index < 0 || index >= datasets.length) return;
+      currentDatasetIndex = index;
+      const ds = datasets[index];
+      datasetStats = ds.datasetStats;
+      examples = ds.examples;
+      currentExampleIndex = 0;
+      renderDatasetTabs();
+      generateExampleButtons();
+      if (examples && examples.length > 0) {
+        loadExample(0);
+      } else {
+        // Clear displays if no examples exist in dataset
+        const issueEl = document.getElementById('issue-display');
+        if (issueEl) {
+          issueEl.style.display = 'none';
+          issueEl.textContent = '';
+        }
+        document.getElementById('original-display').innerHTML = '';
+        document.getElementById('revised-display').innerText = '';
+        document.getElementById('other-edits-list').innerHTML = '';
+        document.getElementById('statistics-panel').innerHTML = '';
+        renderDatasetOverview(); // Redraw to potentially hide it
+      }
+    }
+
+    /**
+     * Load a specific example by index. Populates the issue display, argument text, and edits JSON,
+     * updates the active state on example buttons, and applies edits to render highlights and revisions.
+     * @param {number} index
+     */
+    function loadExample(index) {
+      if (index < 0 || index >= examples.length) return;
+      currentExampleIndex = index;
+      const ex = examples[index];
+      // Update current example reference
+      currentExample = ex;
+      // Update issue display
+      const issueEl = document.getElementById('issue-display');
+      if (ex.issue) {
+        issueEl.style.display = 'block';
+        issueEl.textContent = `Issue: ${ex.issue}`;
+      } else {
+        issueEl.style.display = 'none';
+        issueEl.textContent = '';
+      }
+      // Populate argument text and edits JSON fields
+      document.getElementById('text-input').value = ex.argument || '';
+      document.getElementById('json-input').value = JSON.stringify({ edits: ex.edits }, null, 2);
+      // Update active state on example buttons
+      const container = document.getElementById('example-buttons');
+      Array.from(container.children).forEach((child, idx) => {
+        if (idx === index) {
+          child.classList.add('active');
+        } else {
+          child.classList.remove('active');
+        }
+      });
+      // Apply edits to render highlights
+      applyEdits();
+    }
+
+    // Bind the Apply Edits button to execute our main function
+    document.getElementById('apply-btn').addEventListener('click', applyEdits);
+    // Run once on load to render the defaults
+    if (datasets.length === 0) {
+        datasets.push({
+            fileName: 'Default Example',
+            examples: [{ argument: defaultText, edits: JSON.parse(defaultJSON).edits }],
+            datasetStats: { totalExamples: 0, totalEdits: 0, validEdits: 0, validPerfectEdits: 0, reasonCorrectEdits: 0, rewardSums: { semantic_similarity: 0, fluency: 0, human_like: 0, perfect: 0 }, validPerfectRewardSums: { semantic_similarity: 0, fluency: 0, human_like: 0, perfect: 0 }, predictedSums: {}, predictedBeforeSums: {}, predictedAfterSums: {}, metricsSums: {}, groundTruthSums: {} }
+        });
+        currentDatasetIndex = 0;
+        datasetStats = datasets[0].datasetStats;
+        examples = datasets[0].examples;
+    }
+    loadExample(0);
+  </script>
+</body>
+</html>

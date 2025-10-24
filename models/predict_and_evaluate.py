@@ -258,6 +258,8 @@ def score_edit(original_argument: str, edit: Dict[str, Any], baseline_scores: Di
             logger.error(f"Human-like check failed: {e}")
 
         # Edit-level appropriateness classifier reward (single-edit replacement on original)
+        reason_correct = False
+        classifier_true_reason = None
         try:
             if original_sentence_context and inappropriate_part in original_sentence_context:
                 modified_sentence = original_sentence_context.replace(inappropriate_part, rewritten_part, 1)
@@ -266,35 +268,66 @@ def score_edit(original_argument: str, edit: Dict[str, Any], baseline_scores: Di
                 modified_argument = original_argument.replace(inappropriate_part, rewritten_part, 1)
             before_scores = baseline_scores if baseline_scores is not None else _appropriateness_scorer.get_appropriateness_scores(original_argument)
             after_scores = _appropriateness_scorer.get_appropriateness_scores(modified_argument)
-            dim_name = reason if isinstance(reason, str) else None
+
+            # Compute improvement for overall inappropriateness (for app_reward)
             dim_before = before_scores.get("Inappropriateness")
             dim_after = after_scores.get("Inappropriateness")
-            if (
-                dim_before is not None and dim_after is not None
-            ):
+            if dim_before is not None and dim_after is not None:
                 # Sparse reward: 1 if the reason score improves (decreases), else 0
                 app_reward = 1.0 if (dim_after < dim_before) else 0.0
-            logger.info(f"App Reward Input: modified_argument='{modified_argument}', reason='{dim_name}'")
-            logger.info(f"App Reward Output: before_score={dim_before}, after_score={dim_after}, app_reward={app_reward}")
+
+            # Evaluate reason correctness: ranking with positive improvement requirement
+            # Compute improvement for all 4 main dimensions
+            dimension_improvements = {}
+            for dim in _ANALYSIS_DIMS[1:]:  # Skip "Inappropriateness", use the 4 main categories
+                dim_before_val = before_scores.get(dim)
+                dim_after_val = after_scores.get(dim)
+                if dim_before_val is not None and dim_after_val is not None:
+                    improvement = dim_before_val - dim_after_val  # Positive = better (score decreased)
+                    dimension_improvements[dim] = improvement
+
+            # Filter to only dimensions with positive improvement
+            positive_improvements = {
+                dim: imp for dim, imp in dimension_improvements.items() if imp > 0
+            }
+
+            if positive_improvements:
+                # The dimension with highest improvement is the "true reason"
+                classifier_true_reason = max(positive_improvements, key=positive_improvements.get)
+                reason_correct = (reason == classifier_true_reason)
+                logger.info(f"Reason evaluation: predicted='{reason}', true='{classifier_true_reason}', correct={reason_correct}")
+                logger.info(f"Positive improvements: {positive_improvements}")
+            else:
+                classifier_true_reason = None
+                reason_correct = False
+                logger.info(f"Reason evaluation: No positive improvements, reason_correct=False")
+
+            logger.info(f"App Reward: before_score={dim_before}, after_score={dim_after}, app_reward={app_reward}")
         except Exception as e:
             app_reward = 0.0
+            reason_correct = False
+            classifier_true_reason = None
             logger.error(f"App reward check failed: {e}")
 
 
-    overall = 1.0 if (is_well_formed and semantic_similarity == 1.0 and fluency_score == 1.0 and human_like == 1.0) else 0.0
-    logger.info(f"Overall score: {overall}")
+    # Perfect reward: all three main rewards (semantic_similarity, fluency, human_like) are 1.0
+    # Note: excludes appropriateness (classifier not reliable for small edits)
+    perfect = 1.0 if (is_well_formed and semantic_similarity == 1.0 and fluency_score == 1.0 and human_like == 1.0) else 0.0
+    logger.info(f"Perfect score: {perfect} (excludes app reward)")
 
     return {
         "reason": reason,
+        "classifier_true_reason": classifier_true_reason,
         "inappropriate_part": inappropriate_part,
         "rewritten_part": rewritten_part,
         "valid": bool(is_well_formed),
+        "reason_correct": bool(reason_correct),
         "rewards": {
             "semantic_similarity": float(semantic_similarity),
-            "perplexity": float(fluency_score),
+            "fluency": float(fluency_score),
             "human_like": float(human_like),
             "app": float(app_reward),
-            "overall": float(overall),
+            "perfect": float(perfect),
         },
     }
 
@@ -382,8 +415,8 @@ def main(checkpoint_root: str, output_jsonl: str, use_base_model_only: bool = Fa
 
     total_before_filter = len(eval_dataset)
     # Limit to 1 sample for debugging purposes
-    #limited_n = min(1, len(eval_dataset))
-    #eval_dataset = eval_dataset.select(range(limited_n))
+    limited_n = min(10, len(eval_dataset))
+    eval_dataset = eval_dataset.select(range(limited_n))
     num_examples = len(eval_dataset)
     logger.info(f"Loaded validation dataset: {total_before_filter} examples; filtered to inappropriate and limited: {num_examples}")
 
@@ -391,7 +424,8 @@ def main(checkpoint_root: str, output_jsonl: str, use_base_model_only: bool = Fa
     num_parse_success = 0
     total_edits = 0
     total_valid_edits = 0
-    total_overall_reward_ones = 0
+    total_perfect_reward_ones = 0
+    total_reason_correct = 0
     # Flip counters per dimension (restricted set)
     flips_per_dim: Dict[str, int] = {dim: 0 for dim in _ANALYSIS_DIMS}
 
@@ -506,15 +540,17 @@ def main(checkpoint_root: str, output_jsonl: str, use_base_model_only: bool = Fa
 
             # Cache baseline classifier scores for the original argument for efficiency
             valid_count = sum(1 for e in scored_edits if e.get("valid"))
-            overall_ones = sum(
-                1 for e in scored_edits if e.get("rewards", {}).get("overall") == 1.0
+            perfect_ones = sum(
+                1 for e in scored_edits if e.get("rewards", {}).get("perfect") == 1.0
             )
+            reason_correct_count = sum(1 for e in scored_edits if e.get("reason_correct"))
 
             total_edits += len(scored_edits)
             total_valid_edits += valid_count
-            total_overall_reward_ones += overall_ones
+            total_perfect_reward_ones += perfect_ones
+            total_reason_correct += reason_correct_count
 
-            # Build argument after applying edits with overall reward = 1 (using ops)
+            # Build argument after applying edits with perfect reward = 1 (using ops)
             # Filter edits to only those with perfect score
             perfect_edits = [
                 {
@@ -523,7 +559,7 @@ def main(checkpoint_root: str, output_jsonl: str, use_base_model_only: bool = Fa
                     'rewritten_part': e.get('rewritten_part')
                 }
                 for e in scored_edits
-                if e.get("rewards", {}).get("overall") == 1.0
+                if e.get("rewards", {}).get("perfect") == 1.0
             ]
 
             # Apply edits using ops.edit_applier (same as GRPO)
@@ -607,7 +643,7 @@ def main(checkpoint_root: str, output_jsonl: str, use_base_model_only: bool = Fa
             if idx < 3 or (idx + 1) % 50 == 0 or (idx + 1) == num_examples:
                 elapsed = time.time() - example_start
                 logger.info(
-                    f"[{idx + 1}/{num_examples}] gen={elapsed:.1f}s edits={len(scored_edits)} valid={valid_count} overall1={overall_ones} | issue='{_trunc(issue)}'"
+                    f"[{idx + 1}/{num_examples}] gen={elapsed:.1f}s edits={len(scored_edits)} valid={valid_count} perfect={perfect_ones} reason_correct={reason_correct_count} | issue='{_trunc(issue)}'"
                 )
                 logger.debug(f"Completion: {_trunc(completion, 240)}")
 
@@ -615,14 +651,16 @@ def main(checkpoint_root: str, output_jsonl: str, use_base_model_only: bool = Fa
     flip_percentages = {dim: (flips_per_dim[dim] / max(1, num_examples)) for dim in _ANALYSIS_DIMS}
 
     logger.info(
-        "Finished. Time={:.1f}s | parse_ok={}/{}" 
-        " | edits={} valid_edits={} overall1={} | App%={:.2%}".format(
+        "Finished. Time={:.1f}s | parse_ok={}/{}"
+        " | edits={} valid_edits={} perfect={} reason_correct={} ({:.1%}) | App%={:.2%}".format(
             time.time() - start_all,
             num_parse_success,
             num_examples,
             total_edits,
             total_valid_edits,
-            total_overall_reward_ones,
+            total_perfect_reward_ones,
+            total_reason_correct,
+            total_reason_correct / max(1, total_edits),
             flip_percentages.get("Inappropriateness", 0.0),
         )
     )
