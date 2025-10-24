@@ -1405,7 +1405,12 @@
       }
       const avgAll = averageScores(allEdits || []);
       const avgDisplayed = averageScores(displayEdits || []);
-      // Count displayed edits by reason
+
+      // Count reason correctness
+      const reasonCorrectCount = (allEdits || []).filter(e => e && e.reason_correct === true).length;
+      const reasonCorrectPercent = total > 0 ? (reasonCorrectCount / total * 100).toFixed(1) : 0;
+
+      // Count perfect edits by reason
       const reasonCounts = {};
       (displayEdits || []).forEach(e => {
         if (e && e.reason) {
@@ -1413,6 +1418,23 @@
         }
       });
       const reasonStrings = Object.keys(reasonCounts).map(key => `${key}: ${reasonCounts[key]}`).join(', ');
+
+      // Count reason correctness by predicted reason
+      const reasonStats = {};
+      const allReasons = ['Toxic Emotions', 'Missing Commitment', 'Missing Intelligibility', 'Other Reasons'];
+      allReasons.forEach(reason => {
+        reasonStats[reason] = { total: 0, correct: 0 };
+      });
+      (allEdits || []).forEach(e => {
+        if (e && e.reason) {
+          if (reasonStats[e.reason]) {
+            reasonStats[e.reason].total += 1;
+            if (e.reason_correct === true) {
+              reasonStats[e.reason].correct += 1;
+            }
+          }
+        }
+      });
       // Build HTML for statistics using structured sections and grids for improved aesthetics
       const html = [];
       // We intentionally omit rendering dataset-level summaries inside the statistics panel.
@@ -1423,8 +1445,25 @@
       html.push(`<div class="label">Total edits</div><div class="value">${total}</div>`);
       html.push(`<div class="label">Valid edits</div><div class="value">${validCount}</div>`);
       html.push(`<div class="label">Perfect edits</div><div class="value">${displayedCount}</div>`);
+      html.push(`<div class="label">Reason correct</div><div class="value">${reasonCorrectCount} (${reasonCorrectPercent}%)</div>`);
       html.push(`<div class="label">Avg scores (all edits)</div><div class="value">SS ${avgAll.semantic_similarity.toFixed(2)}, FL ${avgAll.fluency.toFixed(2)}, HL ${avgAll.human_like.toFixed(2)}, PF ${avgAll.perfect.toFixed(2)}</div>`);
       html.push(`<div class="label">Perfect edits by reason</div><div class="value">${escapeHtml(reasonStrings || 'None')}</div>`);
+      html.push('</div>');
+      html.push('</div>');
+
+      // Reason correctness breakdown section
+      html.push('<div class="stats-section">');
+      html.push('<h4>Reason Correctness by Category</h4>');
+      html.push('<div class="scores-grid">');
+      html.push('<div class="label">Reason</div><div class="label">Predicted</div><div class="label">Correct</div>');
+      allReasons.forEach(reason => {
+        const stats = reasonStats[reason];
+        const correctPercent = stats.total > 0 ? ((stats.correct / stats.total) * 100).toFixed(1) : '--';
+        const percentColor = stats.total > 0 ? (stats.correct / stats.total >= 0.5 ? '#188038' : '#d93025') : '#666';
+        html.push(`<div class="label">${escapeHtml(reason)}</div>`);
+        html.push(`<div class="value">${stats.total}</div>`);
+        html.push(`<div class="value">${stats.correct} <span style="color:${percentColor}; font-weight:600;">(${correctPercent}%)</span></div>`);
+      });
       html.push('</div>');
       html.push('</div>');
       // Example scores / metrics / ground truth sections
