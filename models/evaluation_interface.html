@@ -1146,8 +1146,16 @@
         // Build content: reason and short snippet
         const title = document.createElement('div');
         title.style.fontWeight = '600';
-        title.style.marginBottom = '2px';
-        title.textContent = edit.reason;
+        title.style.marginBottom = '4px';
+        // Show predicted and ground truth reasons
+        let titleHtml = `Predicted: ${escapeHtml(edit.reason || 'N/A')}`;
+        if (edit.classifier_true_reason) {
+          const gtColor = edit.reason_correct ? '#188038' : '#d93025';
+          titleHtml += ` | GT: <span style="color:${gtColor};">${escapeHtml(edit.classifier_true_reason)}</span>`;
+        } else if (typeof edit.classifier_true_reason !== 'undefined' && edit.classifier_true_reason === null) {
+          titleHtml += ` | GT: <span style="color:#666;">None (no improvement)</span>`;
+        }
+        title.innerHTML = titleHtml;
         const current = document.createElement('div');
         current.style.marginBottom = '2px';
         const suggestion = document.createElement('div');
@@ -1194,15 +1202,6 @@
             }
           });
           if (parts.length > 0) metaHtml += (metaHtml ? ' • ' : '') + `Scores: ${parts.join(', ')}`;
-        }
-        // Add reason correctness information
-        if (typeof edit.reason_correct !== 'undefined') {
-          const reasonCorrectColor = edit.reason_correct ? '#188038' : '#d93025';
-          const reasonCorrectText = edit.reason_correct ? 'correct' : 'incorrect';
-          metaHtml += (metaHtml ? ' • ' : '') + `Reason: <span style="color:${reasonCorrectColor}; font-weight:600;">${reasonCorrectText}</span>`;
-          if (edit.classifier_true_reason && !edit.reason_correct) {
-            metaHtml += ` (should be: ${escapeHtml(edit.classifier_true_reason)})`;
-          }
         }
         meta.innerHTML = metaHtml;
         if (metaHtml) textContainer.appendChild(meta);
@@ -1273,8 +1272,16 @@
         textContainer.style.flex = '1';
         const title = document.createElement('div');
         title.style.fontWeight = '600';
-        title.style.marginBottom = '2px';
-        title.textContent = edit.reason;
+        title.style.marginBottom = '4px';
+        // Show predicted and ground truth reasons
+        let titleHtml = `Predicted: ${escapeHtml(edit.reason || 'N/A')}`;
+        if (edit.classifier_true_reason) {
+          const gtColor = edit.reason_correct ? '#188038' : '#d93025';
+          titleHtml += ` | GT: <span style="color:${gtColor};">${escapeHtml(edit.classifier_true_reason)}</span>`;
+        } else if (typeof edit.classifier_true_reason !== 'undefined' && edit.classifier_true_reason === null) {
+          titleHtml += ` | GT: <span style="color:#666;">None (no improvement)</span>`;
+        }
+        title.innerHTML = titleHtml;
         const current = document.createElement('div');
         current.style.marginBottom = '2px';
         const suggestion = document.createElement('div');
@@ -1320,15 +1327,6 @@
             }
           }
           if (parts.length > 0) metaHtml += (metaHtml ? ' • ' : '') + `Scores: ${parts.join(', ')}`;
-        }
-        // Add reason correctness information
-        if (typeof edit.reason_correct !== 'undefined') {
-          const reasonCorrectColor = edit.reason_correct ? '#188038' : '#d93025';
-          const reasonCorrectText = edit.reason_correct ? 'correct' : 'incorrect';
-          metaHtml += (metaHtml ? ' • ' : '') + `Reason: <span style="color:${reasonCorrectColor}; font-weight:600;">${reasonCorrectText}</span>`;
-          if (edit.classifier_true_reason && !edit.reason_correct) {
-            metaHtml += ` (should be: ${escapeHtml(edit.classifier_true_reason)})`;
-          }
         }
         meta.innerHTML = metaHtml;
         if (metaHtml) textContainer.appendChild(meta);
