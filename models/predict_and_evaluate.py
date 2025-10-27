@@ -495,15 +495,16 @@ def main(checkpoint_root: str, output_jsonl: str, use_base_model_only: bool = Fa
                     parser = DirectLatexdiffParser()
                     parsed_example = parser.parse_latex_diff(argument, rewritten_argument, "./temp_output")
                     data, _ = fuzzy_post_process_edits([parsed_example])
-                    # Extract edits from old format
-                    all_edits = process_completion(completion, sentences)
+                    # Extract edits from parsed latex diff
+                    all_edits = data.get("edits", [])
+                    logger.info(f"Parsed {len(all_edits)} edits from latex diff")
                 else:
                     # Use process_completion from ops (same as GRPO)
                     all_edits = process_completion(completion, sentences)
 
                 if all_edits:
                     parse_ok = True
-                    logger.info(f"process_completion returned {len(all_edits)} edits")
+                    logger.info(f"Extracted {len(all_edits)} edits")
                     baseline_cls_scores = _predict_dimension_scores(argument)
 
                     # Score each edit
