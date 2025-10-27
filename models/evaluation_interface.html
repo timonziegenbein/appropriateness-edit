@@ -445,8 +445,12 @@
           <canvas id="dataset-rewards-chart" aria-label="Dataset Rewards Chart" role="img"></canvas>
         </div>
       </div>
-      <div id="dataset-summary"></div>
-      <div id="dataset-pred-gt" style="margin-top: 24px;"></div>
+      <h3 style="margin-top: 24px; margin-bottom: 12px;">Argument-Level Metrics (All Datasets)</h3>
+      <div id="dataset-argument-metrics"></div>
+      <h3 style="margin-top: 24px; margin-bottom: 12px;">Edit-Level Metrics (All Datasets)</h3>
+      <div id="dataset-edit-metrics"></div>
+      <h3 style="margin-top: 24px; margin-bottom: 12px;">Predictions vs Ground Truth (Current Dataset)</h3>
+      <div id="dataset-pred-gt"></div>
     </div>
     <div class="editor-container">
       <div class="left-pane">
@@ -543,10 +547,11 @@
      */
     function renderDatasetOverview() {
       const container = document.getElementById('dataset-overview');
-      const summaryEl = document.getElementById('dataset-summary');
+      const argumentMetricsDiv = document.getElementById('dataset-argument-metrics');
+      const editMetricsDiv = document.getElementById('dataset-edit-metrics');
       const datasetPredGtDiv = document.getElementById('dataset-pred-gt');
 
-      if (!datasets || datasets.length === 0 || !container || !summaryEl) {
+      if (!datasets || datasets.length === 0 || !container) {
         if(container) container.style.display = 'none';
         if (metricsChart) { metricsChart.destroy(); metricsChart = null; }
         if (metricsAllChart) { metricsAllChart.destroy(); metricsAllChart = null; }
@@ -786,65 +791,152 @@
           }
       });
       
-      // --- 3. RENDER SUMMARY TABLES (for current dataset only) ---
-      const currentStats = datasetStats; // Use the global for the selected dataset
-      if (!currentStats || !currentStats.totalExamples) {
-        summaryEl.innerHTML = '';
-        datasetPredGtDiv.innerHTML = '';
-        return;
-      }
-      
-      const totalExCurrent = currentStats.totalExamples;
-      const validCount = currentStats.validEdits || 0;
-      const avgReward = { semantic_similarity: 0, fluency: 0, human_like: 0, perfect: 0 };
-      if (validCount > 0) {
-        avgReward.semantic_similarity = currentStats.rewardSums.semantic_similarity / validCount;
-        avgReward.fluency = currentStats.rewardSums.fluency / validCount;
-        avgReward.human_like = currentStats.rewardSums.human_like / validCount;
-        avgReward.perfect = currentStats.rewardSums.perfect / validCount;
-      }
+      // --- 4. RENDER ARGUMENT-LEVEL METRICS TABLE (all datasets) ---
+      let argMetricsHtml = '<div style="overflow-x: auto;"><table style="width: 100%; border-collapse: collapse; font-size: 14px;">';
+      argMetricsHtml += '<thead><tr style="border-bottom: 2px solid #e3e8f1;">';
+      argMetricsHtml += '<th style="text-align: left; padding: 8px; font-weight: 600;">Dataset</th>';
+      argMetricsHtml += '<th style="text-align: right; padding: 8px; font-weight: 600;">Examples</th>';
+      argMetricsHtml += '<th style="text-align: right; padding: 8px; font-weight: 600;">App (Perfect)</th>';
+      argMetricsHtml += '<th style="text-align: right; padding: 8px; font-weight: 600;">App (All)</th>';
+      argMetricsHtml += '<th style="text-align: right; padding: 8px; font-weight: 600;">Sim (Perfect)</th>';
+      argMetricsHtml += '<th style="text-align: right; padding: 8px; font-weight: 600;">Sim (All)</th>';
+      argMetricsHtml += '<th style="text-align: right; padding: 8px; font-weight: 600;">NES (Perfect)</th>';
+      argMetricsHtml += '<th style="text-align: right; padding: 8px; font-weight: 600;">NES (All)</th>';
+      argMetricsHtml += '<th style="text-align: right; padding: 8px; font-weight: 600;">PPL (Perfect)</th>';
+      argMetricsHtml += '<th style="text-align: right; padding: 8px; font-weight: 600;">PPL (All)</th>';
+      argMetricsHtml += '<th style="text-align: right; padding: 8px; font-weight: 600;">GM (Perfect)</th>';
+      argMetricsHtml += '<th style="text-align: right; padding: 8px; font-weight: 600;">GM (All)</th>';
+      argMetricsHtml += '</tr></thead><tbody>';
 
-      let summaryHtml = '<div class="two-col-grid">';
-      summaryHtml += `<div class="label">Total examples</div><div class="value">${totalExCurrent}</div>`;
-      summaryHtml += `<div class="label">Total edits</div><div class="value">${currentStats.totalEdits}</div>`;
-      summaryHtml += `<div class="label">Valid edits</div><div class="value">${currentStats.validEdits}</div>`;
-      summaryHtml += `<div class="label">Perfect edits</div><div class="value">${currentStats.validPerfectEdits}</div>`;
-      const reasonCorrectPercent = currentStats.totalEdits > 0 ? (currentStats.reasonCorrectEdits / currentStats.totalEdits * 100).toFixed(1) : 0;
-      summaryHtml += `<div class="label">Reason correct</div><div class="value">${currentStats.reasonCorrectEdits} (${reasonCorrectPercent}%)</div>`;
-      summaryHtml += `<div class="label">Avg reward (valid)</div><div class="value">SS ${avgReward.semantic_similarity.toFixed(2)}, FL ${avgReward.fluency.toFixed(2)}, HL ${avgReward.human_like.toFixed(2)}, PF ${avgReward.perfect.toFixed(2)}</div>`;
-      summaryHtml += '</div>';
-      summaryEl.innerHTML = summaryHtml;
-      
-      const gtAvg = {};
-      for (const key in currentStats.groundTruthSums) {
-        gtAvg[key] = currentStats.groundTruthSums[key] / totalExCurrent;
-      }
-      const predBeforeAvg = {};
-      const predAfterAvg = {};
-      for (const key in currentStats.predictedBeforeSums) {
-        predBeforeAvg[key] = currentStats.predictedBeforeSums[key] / totalExCurrent;
-      }
-      for (const key in currentStats.predictedAfterSums) {
-        predAfterAvg[key] = currentStats.predictedAfterSums[key] / totalExCurrent;
-      }
+      datasets.forEach((ds, idx) => {
+        const stats = ds.datasetStats;
+        const totalEx = stats.totalExamples || 0;
+        const rowStyle = idx === currentDatasetIndex ? 'background-color: #f0f7ff;' : '';
 
-      const catSet = new Set([...Object.keys(predBeforeAvg), ...Object.keys(predAfterAvg), ...Object.keys(gtAvg)]);
-      const categories = Array.from(catSet).sort();
-      
-      if (categories.length > 0) {
-        let tableHtml = '<h3>Predictions vs Ground Truth (Current Dataset)</h3>';
-        tableHtml += '<div class="scores-grid-4">';
-        tableHtml += '<div class="label">Category</div><div class="label">Pred. before</div><div class="label">Pred. after</div><div class="label">Ground truth</div>';
-        categories.forEach((cat) => {
-          const beforeVal = predBeforeAvg[cat]?.toFixed(2) ?? '--';
-          const afterVal = predAfterAvg[cat]?.toFixed(2) ?? '--';
-          const gtVal = gtAvg[cat]?.toFixed(2) ?? '--';
-          tableHtml += `<div class="label">${escapeHtml(cat)}</div><div class="value">${beforeVal}</div><div class="value">${afterVal}</div><div class="value">${gtVal}</div>`;
-        });
-        tableHtml += '</div>';
-        datasetPredGtDiv.innerHTML = tableHtml;
-      } else {
-        datasetPredGtDiv.innerHTML = '';
+        // Calculate averages for perfect edits (metrics)
+        const appPerfect = totalEx > 0 ? (stats.metricsSums.App / totalEx).toFixed(2) : '--';
+        const simPerfect = totalEx > 0 ? (stats.metricsSums.Sim / totalEx).toFixed(2) : '--';
+        const nesPerfect = totalEx > 0 ? (stats.metricsSums.NES / totalEx).toFixed(2) : '--';
+        const pplPerfect = totalEx > 0 ? (stats.metricsSums.PPL / totalEx).toFixed(2) : '--';
+        const gmPerfect = totalEx > 0 ? (stats.metricsSums.GM / totalEx).toFixed(2) : '--';
+
+        // Calculate averages for all valid edits (metrics_all)
+        const appAll = totalEx > 0 ? (stats.metricsAllSums.App / totalEx).toFixed(2) : '--';
+        const simAll = totalEx > 0 ? (stats.metricsAllSums.Sim / totalEx).toFixed(2) : '--';
+        const nesAll = totalEx > 0 ? (stats.metricsAllSums.NES / totalEx).toFixed(2) : '--';
+        const pplAll = totalEx > 0 ? (stats.metricsAllSums.PPL / totalEx).toFixed(2) : '--';
+        const gmAll = totalEx > 0 ? (stats.metricsAllSums.GM / totalEx).toFixed(2) : '--';
+
+        argMetricsHtml += `<tr style="${rowStyle} border-bottom: 1px solid #f0f0f0;">`;
+        argMetricsHtml += `<td style="padding: 8px;">${escapeHtml(ds.fileName)}</td>`;
+        argMetricsHtml += `<td style="padding: 8px; text-align: right;">${totalEx}</td>`;
+        argMetricsHtml += `<td style="padding: 8px; text-align: right;">${appPerfect}</td>`;
+        argMetricsHtml += `<td style="padding: 8px; text-align: right;">${appAll}</td>`;
+        argMetricsHtml += `<td style="padding: 8px; text-align: right;">${simPerfect}</td>`;
+        argMetricsHtml += `<td style="padding: 8px; text-align: right;">${simAll}</td>`;
+        argMetricsHtml += `<td style="padding: 8px; text-align: right;">${nesPerfect}</td>`;
+        argMetricsHtml += `<td style="padding: 8px; text-align: right;">${nesAll}</td>`;
+        argMetricsHtml += `<td style="padding: 8px; text-align: right;">${pplPerfect}</td>`;
+        argMetricsHtml += `<td style="padding: 8px; text-align: right;">${pplAll}</td>`;
+        argMetricsHtml += `<td style="padding: 8px; text-align: right;">${gmPerfect}</td>`;
+        argMetricsHtml += `<td style="padding: 8px; text-align: right;">${gmAll}</td>`;
+        argMetricsHtml += '</tr>';
+      });
+
+      argMetricsHtml += '</tbody></table></div>';
+      if (argumentMetricsDiv) argumentMetricsDiv.innerHTML = argMetricsHtml;
+
+      // --- 5. RENDER EDIT-LEVEL METRICS TABLE (all datasets) ---
+      let editMetricsHtml = '<div style="overflow-x: auto;"><table style="width: 100%; border-collapse: collapse; font-size: 14px;">';
+      editMetricsHtml += '<thead><tr style="border-bottom: 2px solid #e3e8f1;">';
+      editMetricsHtml += '<th style="text-align: left; padding: 8px; font-weight: 600;">Dataset</th>';
+      editMetricsHtml += '<th style="text-align: right; padding: 8px; font-weight: 600;">Total Edits</th>';
+      editMetricsHtml += '<th style="text-align: right; padding: 8px; font-weight: 600;">Valid Edits</th>';
+      editMetricsHtml += '<th style="text-align: right; padding: 8px; font-weight: 600;">Perfect Edits</th>';
+      editMetricsHtml += '<th style="text-align: right; padding: 8px; font-weight: 600;">Reason Correct</th>';
+      editMetricsHtml += '<th style="text-align: right; padding: 8px; font-weight: 600;">Avg SS</th>';
+      editMetricsHtml += '<th style="text-align: right; padding: 8px; font-weight: 600;">Avg FL</th>';
+      editMetricsHtml += '<th style="text-align: right; padding: 8px; font-weight: 600;">Avg HL</th>';
+      editMetricsHtml += '<th style="text-align: right; padding: 8px; font-weight: 600;">Avg App</th>';
+      editMetricsHtml += '<th style="text-align: right; padding: 8px; font-weight: 600;">Avg Perfect</th>';
+      editMetricsHtml += '</tr></thead><tbody>';
+
+      datasets.forEach((ds, idx) => {
+        const stats = ds.datasetStats;
+        const rowStyle = idx === currentDatasetIndex ? 'background-color: #f0f7ff;' : '';
+
+        const totalEdits = stats.totalEdits || 0;
+        const validEdits = stats.validEdits || 0;
+        const perfectEdits = stats.validPerfectEdits || 0;
+        const reasonCorrect = stats.reasonCorrectEdits || 0;
+
+        const validPercent = totalEdits > 0 ? ((validEdits / totalEdits) * 100).toFixed(1) : '0.0';
+        const perfectPercent = totalEdits > 0 ? ((perfectEdits / totalEdits) * 100).toFixed(1) : '0.0';
+        const reasonPercent = totalEdits > 0 ? ((reasonCorrect / totalEdits) * 100).toFixed(1) : '0.0';
+
+        const avgRewards = stats.rewardAverages || {};
+        const ss = avgRewards.semantic_similarity?.toFixed(2) || '--';
+        const fl = avgRewards.fluency?.toFixed(2) || '--';
+        const hl = avgRewards.human_like?.toFixed(2) || '--';
+        const app = avgRewards.app?.toFixed(2) || '--';
+        const perfect = avgRewards.perfect?.toFixed(2) || '--';
+
+        editMetricsHtml += `<tr style="${rowStyle} border-bottom: 1px solid #f0f0f0;">`;
+        editMetricsHtml += `<td style="padding: 8px;">${escapeHtml(ds.fileName)}</td>`;
+        editMetricsHtml += `<td style="padding: 8px; text-align: right;">${totalEdits}</td>`;
+        editMetricsHtml += `<td style="padding: 8px; text-align: right;">${validEdits} (${validPercent}%)</td>`;
+        editMetricsHtml += `<td style="padding: 8px; text-align: right;">${perfectEdits} (${perfectPercent}%)</td>`;
+        editMetricsHtml += `<td style="padding: 8px; text-align: right;">${reasonCorrect} (${reasonPercent}%)</td>`;
+        editMetricsHtml += `<td style="padding: 8px; text-align: right;">${ss}</td>`;
+        editMetricsHtml += `<td style="padding: 8px; text-align: right;">${fl}</td>`;
+        editMetricsHtml += `<td style="padding: 8px; text-align: right;">${hl}</td>`;
+        editMetricsHtml += `<td style="padding: 8px; text-align: right;">${app}</td>`;
+        editMetricsHtml += `<td style="padding: 8px; text-align: right;">${perfect}</td>`;
+        editMetricsHtml += '</tr>';
+      });
+
+      editMetricsHtml += '</tbody></table></div>';
+      if (editMetricsDiv) editMetricsDiv.innerHTML = editMetricsHtml;
+
+      // --- 6. RENDER PREDICTIONS VS GROUND TRUTH (current dataset only) ---
+      if (datasetPredGtDiv && datasetStats) {
+        const currentStats = datasetStats;
+        const totalExCurrent = currentStats.totalExamples || 0;
+
+        if (totalExCurrent > 0) {
+          const gtAvg = {};
+          for (const key in currentStats.groundTruthSums) {
+            gtAvg[key] = currentStats.groundTruthSums[key] / totalExCurrent;
+          }
+          const predBeforeAvg = {};
+          const predAfterAvg = {};
+          for (const key in currentStats.predictedBeforeSums) {
+            predBeforeAvg[key] = currentStats.predictedBeforeSums[key] / totalExCurrent;
+          }
+          for (const key in currentStats.predictedAfterSums) {
+            predAfterAvg[key] = currentStats.predictedAfterSums[key] / totalExCurrent;
+          }
+
+          const catSet = new Set([...Object.keys(predBeforeAvg), ...Object.keys(predAfterAvg), ...Object.keys(gtAvg)]);
+          const categories = Array.from(catSet).sort();
+
+          if (categories.length > 0) {
+            let tableHtml = '<div class="scores-grid-4">';
+            tableHtml += '<div class="label">Category</div><div class="label">Pred. before</div><div class="label">Pred. after</div><div class="label">Ground truth</div>';
+            categories.forEach((cat) => {
+              const beforeVal = predBeforeAvg[cat]?.toFixed(2) ?? '--';
+              const afterVal = predAfterAvg[cat]?.toFixed(2) ?? '--';
+              const gtVal = gtAvg[cat]?.toFixed(2) ?? '--';
+              tableHtml += `<div class="label">${escapeHtml(cat)}</div><div class="value">${beforeVal}</div><div class="value">${afterVal}</div><div class="value">${gtVal}</div>`;
+            });
+            tableHtml += '</div>';
+            datasetPredGtDiv.innerHTML = tableHtml;
+          } else {
+            datasetPredGtDiv.innerHTML = '<div style="color: #999; font-style: italic;">No prediction data available for this dataset.</div>';
+          }
+        } else {
+          datasetPredGtDiv.innerHTML = '';
+        }
       }
     }
 
