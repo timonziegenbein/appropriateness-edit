@@ -396,17 +396,17 @@ from icecream import ic
 # Main: generate, parse, score, write JSONL
 # -----------------------------
 
-def main(checkpoint_root: str, output_jsonl: str, use_base_model_only: bool = False, parse_diff: bool = False, model_name: str = None):
+def main(checkpoint_root: str, output_jsonl: str, use_base_model_only: bool = False, parse_diff: bool = False, model_name: str = None, split: str = "validation"):
     os.makedirs(os.path.dirname(output_jsonl), exist_ok=True)
 
-    logger.info(f"Starting validation edit prediction. Output file: {output_jsonl}")
+    logger.info(f"Starting edit prediction on {split} split. Output file: {output_jsonl}")
 
     if not parse_diff:
         model_load_start = time.time()
         trainer, tokenizer = load_generation_model(checkpoint_root, use_base_model_only)
         logger.info(f"Loaded generation model and tokenizer in {time.time() - model_load_start:.1f}s")
 
-    eval_dataset = load_dataset("timonziegenbein/appropriateness-corpus", split="validation")
+    eval_dataset = load_dataset("timonziegenbein/appropriateness-corpus", split=split)
     eval_dataset = eval_dataset.filter(lambda x: float(x.get("Inappropriateness", 0.0)) >= 0.5)
 
     # Load the exact validation set used in guided_grpo.py and keep only inappropriate examples
@@ -423,7 +423,7 @@ def main(checkpoint_root: str, output_jsonl: str, use_base_model_only: bool = Fa
     #limited_n = min(10, len(eval_dataset))
     #eval_dataset = eval_dataset.select(range(limited_n))
     num_examples = len(eval_dataset)
-    logger.info(f"Loaded validation dataset: {total_before_filter} examples; filtered to inappropriate and limited: {num_examples}")
+    logger.info(f"Loaded {split} dataset: {total_before_filter} examples; filtered to inappropriate: {num_examples}")
 
     # Aggregate metrics
     num_parse_success = 0
@@ -583,8 +583,21 @@ def main(checkpoint_root: str, output_jsonl: str, use_base_model_only: bool = Fa
                 if e.get("rewards", {}).get("perfect") == 1.0
             ]
 
-            # Apply edits using ops.edit_applier (same as GRPO)
-            argument_after_edits = apply_edits_to_argument(perfect_edits, sentences, argument)
+            # For parse_diff mode, edits don't have sentence info, so apply directly to full argument
+            if parse_diff and perfect_edits:
+                argument_after_edits = argument
+                for edit in perfect_edits:
+                    inappropriate_part = edit.get('inappropriate_part')
+                    rewritten_part = edit.get('rewritten_part')
+                    if inappropriate_part and inappropriate_part in argument_after_edits:
+                        argument_after_edits = argument_after_edits.replace(inappropriate_part, rewritten_part, 1)
+                    elif not inappropriate_part and rewritten_part:
+                        # Addition - append at the end (this is a simplification)
+                        argument_after_edits = argument_after_edits + " " + rewritten_part
+                logger.info(f"Applied {len(perfect_edits)} perfect edits directly to argument")
+            else:
+                # Apply edits using ops.edit_applier (same as GRPO)
+                argument_after_edits = apply_edits_to_argument(perfect_edits, sentences, argument)
 
             # Argument-level classifier metrics
             # App.: flip from inappropriate (>0.5) to appropriate (<=0.5)
@@ -693,15 +706,16 @@ def main(checkpoint_root: str, output_jsonl: str, use_base_model_only: bool = Fa
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Predict validation set edits and calculate rewards.")
+    parser = argparse.ArgumentParser(description="Predict edits and calculate rewards on a dataset split.")
     parser.add_argument("--checkpoint_root", type=str, help="Path to the checkpoint directory.")
     parser.add_argument("--output_jsonl", type=str, required=True, help="Path to the output JSONL file.")
     parser.add_argument("--use_base_model_only", action="store_true", help="Use the base model without LoRA.")
     parser.add_argument("--parse_diff", action="store_true", help="Parse diffs instead of generating edits.")
     parser.add_argument("--model_name", type=str, help="The name of the model to evaluate from the dataframe.")
+    parser.add_argument("--split", type=str, default="validation", choices=["train", "validation", "test"], help="Dataset split to use (default: validation)")
     args = parser.parse_args()
 
     if not args.use_base_model_only and not args.checkpoint_root and not args.parse_diff:
         parser.error("--checkpoint_root is required unless --use_base_model_only or --parse_diff is specified.")
 
-    main(args.checkpoint_root, args.output_jsonl, args.use_base_model_only, args.parse_diff, args.model_name)
+    main(args.checkpoint_root, args.output_jsonl, args.use_base_model_only, args.parse_diff, args.model_name, args.split)
