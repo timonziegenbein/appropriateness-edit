@@ -224,6 +224,8 @@ def score_edit(original_argument: str, edit: Dict[str, Any], baseline_scores: Di
     fluency_score = 0.0
     human_like = 0.0
     app_reward = 0.0
+    reason_correct = False
+    classifier_true_reason = None
 
     if is_well_formed:
         # Semantic similarity
@@ -258,8 +260,6 @@ def score_edit(original_argument: str, edit: Dict[str, Any], baseline_scores: Di
             logger.error(f"Human-like check failed: {e}")
 
         # Edit-level appropriateness classifier reward (single-edit replacement on original)
-        reason_correct = False
-        classifier_true_reason = None
         try:
             if original_sentence_context and inappropriate_part in original_sentence_context:
                 modified_sentence = original_sentence_context.replace(inappropriate_part, rewritten_part, 1)
