@@ -599,6 +599,30 @@ def main(checkpoint_root: str, output_jsonl: str, use_base_model_only: bool = Fa
                 # Apply edits using ops.edit_applier (same as GRPO)
                 argument_after_edits = apply_edits_to_argument(perfect_edits, sentences, argument)
 
+            # Also compute metrics using ALL valid edits (not just perfect ones)
+            all_valid_edits = [
+                {
+                    'original_sentence': e.get('original_sentence', ''),
+                    'inappropriate_part': e.get('inappropriate_part'),
+                    'rewritten_part': e.get('rewritten_part')
+                }
+                for e in scored_edits
+                if e.get("valid") == True
+            ]
+
+            if parse_diff and all_valid_edits:
+                argument_after_all_edits = argument
+                for edit in all_valid_edits:
+                    inappropriate_part = edit.get('inappropriate_part')
+                    rewritten_part = edit.get('rewritten_part')
+                    if inappropriate_part and inappropriate_part in argument_after_all_edits:
+                        argument_after_all_edits = argument_after_all_edits.replace(inappropriate_part, rewritten_part, 1)
+                    elif not inappropriate_part and rewritten_part:
+                        argument_after_all_edits = argument_after_all_edits + " " + rewritten_part
+                logger.info(f"Applied {len(all_valid_edits)} valid edits (all) directly to argument")
+            else:
+                argument_after_all_edits = apply_edits_to_argument(all_valid_edits, sentences, argument)
+
             # Argument-level classifier metrics
             # App.: flip from inappropriate (>0.5) to appropriate (<=0.5)
             scores_before = _predict_dimension_scores(argument)
@@ -633,6 +657,36 @@ def main(checkpoint_root: str, output_jsonl: str, use_base_model_only: bool = Fa
             except Exception:
                 gm_score = 0.0
 
+            # Compute metrics for ALL valid edits
+            scores_after_all = _predict_dimension_scores(argument_after_all_edits)
+            flipped_all = False
+            for dim in _ANALYSIS_DIMS:
+                before_val = scores_before.get(dim)
+                after_val_all = scores_after_all.get(dim)
+                if before_val is not None and after_val_all is not None and after_val_all < 0.5:
+                    if dim == "Inappropriateness":
+                        flipped_all = True
+            # Sim.: BERTScore F1 for all edits
+            try:
+                _, _, f1_sim_all = _bert_scorer.score([argument_after_all_edits], [argument])
+                sim_score_all = float(f1_sim_all.item())
+            except Exception:
+                sim_score_all = 0.0
+            # NES.: normalized word-wise edit similarity for all edits
+            nes_score_all = _normalized_edit_similarity_words(argument, argument_after_all_edits)
+            # PPL.: perplexity for all edits
+            try:
+                ppl_score_all = calculate_text_perplexity(argument_after_all_edits)
+            except Exception:
+                ppl_score_all = float("inf")
+            # GM.: geometric mean for all edits
+            app_bin_all = 1.0 if flipped_all else 0.0
+            inv_ppl_all = 0.0 if not np.isfinite(ppl_score_all) or ppl_score_all <= 0 else (1.0 / ppl_score_all)
+            try:
+                gm_score_all = float((app_bin_all * sim_score_all * inv_ppl_all) ** (1 / 3)) if app_bin_all > 0 and sim_score_all > 0 and inv_ppl_all > 0 else 0.0
+            except Exception:
+                gm_score_all = 0.0
+
             # Ground truth scores (if available in dataset)
             gt_scores: Dict[str, float] = {}
             for dim in _ANALYSIS_DIMS:
@@ -648,22 +702,36 @@ def main(checkpoint_root: str, output_jsonl: str, use_base_model_only: bool = Fa
                 val = scores_before.get(dim)
                 pred_scores_before[dim] = 1.0 if (val is not None and float(val) >= 0.5) else 0.0
 
-            # Predicted scores for the same categories as ground truth, after edits
+            # Predicted scores for the same categories as ground truth, after perfect edits
             pred_scores_after: Dict[str, float] = {}
             for dim in gt_scores.keys():
                 val = scores_after.get(dim)
                 pred_scores_after[dim] = 1.0 if (val is not None and float(val) > 0.5) else 0.0
 
+            # Predicted scores after ALL valid edits
+            pred_scores_after_all: Dict[str, float] = {}
+            for dim in gt_scores.keys():
+                val = scores_after_all.get(dim)
+                pred_scores_after_all[dim] = 1.0 if (val is not None and float(val) > 0.5) else 0.0
+
             record = {
                 "issue": issue,
                 "argument": argument,
                 "argument_after_edits": argument_after_edits,
+                "argument_after_all_edits": argument_after_all_edits,
                 "metrics": {
                     "App": app_bin,
                     "Sim": sim_score,
                     "NES": nes_score,
                     "PPL": ppl_score,
                     "GM": gm_score,
+                },
+                "metrics_all": {
+                    "App": app_bin_all,
+                    "Sim": sim_score_all,
+                    "NES": nes_score_all,
+                    "PPL": ppl_score_all,
+                    "GM": gm_score_all,
                 },
                 "ground_truth_scores": gt_scores,
                 "predicted_scores_before": pred_scores_before,

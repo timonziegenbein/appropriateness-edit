@@ -431,11 +431,17 @@
 
     <div id="dataset-overview" class="panel" style="display: none; margin-bottom: 32px;">
       <h2 style="margin-top: 0;">Dataset Overview</h2>
-      <div class="charts" style="margin-bottom: 24px; display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+      <div class="charts" style="margin-bottom: 24px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px;">
         <div style="width:100%; height:350px;">
-          <canvas id="dataset-metrics-chart" aria-label="Dataset Comparison Chart" role="img"></canvas>
+          <h3 style="text-align: center; margin-top: 0; font-size: 14px;">Metrics (Perfect Edits)</h3>
+          <canvas id="dataset-metrics-chart" aria-label="Dataset Comparison Chart (Perfect Edits)" role="img"></canvas>
         </div>
         <div style="width:100%; height:350px;">
+          <h3 style="text-align: center; margin-top: 0; font-size: 14px;">Metrics (All Edits)</h3>
+          <canvas id="dataset-metrics-all-chart" aria-label="Dataset Comparison Chart (All Edits)" role="img"></canvas>
+        </div>
+        <div style="width:100%; height:350px;">
+          <h3 style="text-align: center; margin-top: 0; font-size: 14px;">Reward Averages</h3>
           <canvas id="dataset-rewards-chart" aria-label="Dataset Rewards Chart" role="img"></canvas>
         </div>
       </div>
@@ -528,6 +534,7 @@
 
     // Chart.js chart instances
     let metricsChart = null;
+    let metricsAllChart = null;
     let rewardsChart = null;
 
     /**
@@ -542,6 +549,7 @@
       if (!datasets || datasets.length === 0 || !container || !summaryEl) {
         if(container) container.style.display = 'none';
         if (metricsChart) { metricsChart.destroy(); metricsChart = null; }
+        if (metricsAllChart) { metricsAllChart.destroy(); metricsAllChart = null; }
         if (rewardsChart) { rewardsChart.destroy(); rewardsChart = null; }
         return;
       }
@@ -655,7 +663,107 @@
         }
       });
 
-      // --- 2. RENDER REWARDS CHART ---
+      // --- 2. RENDER METRICS ALL CHART (using all valid edits instead of perfect edits) ---
+      const allMetricLabelsAll = new Set();
+      datasets.forEach(ds => {
+        if (ds.datasetStats && ds.datasetStats.metricsAllSums) {
+          Object.keys(ds.datasetStats.metricsAllSums).forEach(key => {
+            if (key.toLowerCase() !== 'gm') { // Exclude 'GM'
+              allMetricLabelsAll.add(key);
+            }
+          });
+        }
+      });
+      allMetricLabelsAll.add('Valid Edits %'); // Add our custom metric
+      const sortedLabelsAll = Array.from(allMetricLabelsAll).sort();
+      const chartLabelsAll = sortedLabelsAll.map(lab => (lab.toLowerCase() === 'ppl' ? 'PPL (norm-inv)' : lab));
+
+      // Calculate min and max average PPL across all datasets for dynamic normalization
+      let minAvgPPLAll = Infinity;
+      let maxAvgPPLAll = -Infinity;
+      let hasPPLAll = false;
+      datasets.forEach(ds => {
+          const stats = ds.datasetStats;
+          if (stats.totalExamples > 0 && typeof stats.metricsAllSums.PPL !== 'undefined') {
+              hasPPLAll = true;
+              const avgPPL = stats.metricsAllSums.PPL / stats.totalExamples;
+              if (avgPPL < minAvgPPLAll) minAvgPPLAll = avgPPL;
+              if (avgPPL > maxAvgPPLAll) maxAvgPPLAll = avgPPL;
+          }
+      });
+      const pplRangeAll = maxAvgPPLAll - minAvgPPLAll;
+
+      const chartDatasetsAll = [];
+      datasets.forEach((ds, index) => {
+        const stats = ds.datasetStats;
+        const totalEx = stats.totalExamples;
+        if (!totalEx || totalEx === 0) return;
+
+        const metricsAvgAll = {};
+        for (const key in stats.metricsAllSums) {
+          metricsAvgAll[key] = stats.metricsAllSums[key] / totalEx;
+        }
+
+        const dataPointsAll = sortedLabelsAll.map(label => {
+          if (label === 'Valid Edits %') {
+            return stats.totalEdits > 0 ? stats.validEdits / stats.totalEdits : 0;
+          }
+          const val = metricsAvgAll[label] || 0;
+          if (label.toLowerCase() === 'ppl') {
+            if (hasPPLAll && pplRangeAll > 0) {
+              // More than one dataset with different PPLs: Use relative normalization
+              const normalized = (val - minAvgPPLAll) / pplRangeAll;
+              return 1.0 - normalized;
+            } else {
+              // Only one dataset, or all have same PPL: Use a robust absolute scale
+              return val > 0 ? Math.min(1, 1 / val) : 0;
+            }
+          }
+          return val;
+        });
+
+        const color = colorPalette[index % colorPalette.length];
+        chartDatasetsAll.push({
+          label: ds.fileName,
+          data: dataPointsAll,
+          fill: true,
+          backgroundColor: color.bg,
+          borderColor: color.border,
+          pointBackgroundColor: color.border,
+          pointBorderColor: '#fff',
+          pointHoverBackgroundColor: '#fff',
+          pointHoverBorderColor: color.border
+        });
+      });
+
+      if (metricsAllChart) {
+        metricsAllChart.destroy();
+      }
+      const metricsAllCtx = document.getElementById('dataset-metrics-all-chart').getContext('2d');
+      metricsAllChart = new Chart(metricsAllCtx, {
+        type: 'radar',
+        data: { labels: chartLabelsAll, datasets: chartDatasetsAll },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            title: { display: true, text: 'Dataset Metrics Comparison (All Edits)' },
+            legend: { position: 'top', display: datasets.length > 1 },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  return `${context.dataset.label}: ${context.parsed.r.toFixed(3)}`;
+                }
+              }
+            }
+          },
+          scales: {
+            r: { beginAtZero: true, max: 1, ticks: { stepSize: 0.2, backdropColor: 'transparent' }, pointLabels: { font: { size: 13 } } }
+          }
+        }
+      });
+
+      // --- 3. RENDER REWARDS CHART ---
       const rewardsCtx = document.getElementById('dataset-rewards-chart').getContext('2d');
       const rewardsLabels = ['Semantic Similarity', 'Fluency', 'Human-Like', 'App', 'Perfect'];
       const rewardsChartDatasets = [];
@@ -1565,6 +1673,7 @@
             predictedBeforeSums: {},
             predictedAfterSums: {},
             metricsSums: {},
+            metricsAllSums: {},
             groundTruthSums: {}
           }
         };
@@ -1620,6 +1729,12 @@
               if (obj.metrics && typeof obj.metrics === 'object') {
                 for (const [key, val] of Object.entries(obj.metrics)) {
                   dataset.datasetStats.metricsSums[key] = (dataset.datasetStats.metricsSums[key] || 0) + Number(val || 0);
+                }
+              }
+              // Accumulate metrics_all if provided (metrics computed with all valid edits)
+              if (obj.metrics_all && typeof obj.metrics_all === 'object') {
+                for (const [key, val] of Object.entries(obj.metrics_all)) {
+                  dataset.datasetStats.metricsAllSums[key] = (dataset.datasetStats.metricsAllSums[key] || 0) + Number(val || 0);
                 }
               }
               if (obj.ground_truth_scores && typeof obj.ground_truth_scores === 'object') {
@@ -1798,7 +1913,7 @@
         datasets.push({
             fileName: 'Default Example',
             examples: [{ argument: defaultText, edits: JSON.parse(defaultJSON).edits }],
-            datasetStats: { totalExamples: 0, totalEdits: 0, validEdits: 0, validPerfectEdits: 0, reasonCorrectEdits: 0, rewardSums: { semantic_similarity: 0, fluency: 0, human_like: 0, perfect: 0 }, validPerfectRewardSums: { semantic_similarity: 0, fluency: 0, human_like: 0, perfect: 0 }, predictedSums: {}, predictedBeforeSums: {}, predictedAfterSums: {}, metricsSums: {}, groundTruthSums: {} }
+            datasetStats: { totalExamples: 0, totalEdits: 0, validEdits: 0, validPerfectEdits: 0, reasonCorrectEdits: 0, rewardSums: { semantic_similarity: 0, fluency: 0, human_like: 0, perfect: 0 }, validPerfectRewardSums: { semantic_similarity: 0, fluency: 0, human_like: 0, perfect: 0 }, predictedSums: {}, predictedBeforeSums: {}, predictedAfterSums: {}, metricsSums: {}, metricsAllSums: {}, groundTruthSums: {} }
         });
         currentDatasetIndex = 0;
         datasetStats = datasets[0].datasetStats;
