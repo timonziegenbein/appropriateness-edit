@@ -576,22 +576,10 @@
       });
       allMetricLabels.add('Perfect Edits %'); // Add our custom metric
       const sortedLabels = Array.from(allMetricLabels).sort();
-      const chartLabels = sortedLabels.map(lab => (lab.toLowerCase() === 'ppl' ? 'PPL (norm-inv)' : lab));
-      
-      // Calculate min and max average PPL across all datasets for dynamic normalization
-      let minAvgPPL = Infinity;
-      let maxAvgPPL = -Infinity;
-      let hasPPL = false;
-      datasets.forEach(ds => {
-          const stats = ds.datasetStats;
-          if (stats.totalExamples > 0 && typeof stats.metricsSums.PPL !== 'undefined') {
-              hasPPL = true;
-              const avgPPL = stats.metricsSums.PPL / stats.totalExamples;
-              if (avgPPL < minAvgPPL) minAvgPPL = avgPPL;
-              if (avgPPL > maxAvgPPL) maxAvgPPL = avgPPL;
-          }
-      });
-      const pplRange = maxAvgPPL - minAvgPPL;
+      const chartLabels = sortedLabels.map(lab => (lab.toLowerCase() === 'ppl' ? 'PPL (exp-norm)' : lab));
+
+      // Scaling constant for exponential PPL normalization
+      const PPL_K = 0.01;
 
       const chartDatasets = [];
       datasets.forEach((ds, index) => {
@@ -610,14 +598,9 @@
           }
           const val = metricsAvg[label] || 0;
           if (label.toLowerCase() === 'ppl') {
-            if (hasPPL && pplRange > 0) {
-              // More than one dataset with different PPLs: Use relative normalization
-              const normalized = (val - minAvgPPL) / pplRange;
-              return 1.0 - normalized;
-            } else {
-              // Only one dataset, or all have same PPL: Use a robust absolute scale
-              return val > 0 ? Math.min(1, 1 / val) : 0;
-            }
+            // Normalize using negative exponential: PPL_norm = e^(-k * PPL)
+            // Perfect model (PPL=1) → ~0.99, Poor model (PPL→∞) → 0
+            return val > 0 ? Math.exp(-PPL_K * val) : 0;
           }
           return val;
         });
@@ -676,22 +659,7 @@
       });
       allMetricLabelsAll.add('Valid Edits %'); // Add our custom metric
       const sortedLabelsAll = Array.from(allMetricLabelsAll).sort();
-      const chartLabelsAll = sortedLabelsAll.map(lab => (lab.toLowerCase() === 'ppl' ? 'PPL (norm-inv)' : lab));
-
-      // Calculate min and max average PPL across all datasets for dynamic normalization
-      let minAvgPPLAll = Infinity;
-      let maxAvgPPLAll = -Infinity;
-      let hasPPLAll = false;
-      datasets.forEach(ds => {
-          const stats = ds.datasetStats;
-          if (stats.totalExamples > 0 && typeof stats.metricsAllSums.PPL !== 'undefined') {
-              hasPPLAll = true;
-              const avgPPL = stats.metricsAllSums.PPL / stats.totalExamples;
-              if (avgPPL < minAvgPPLAll) minAvgPPLAll = avgPPL;
-              if (avgPPL > maxAvgPPLAll) maxAvgPPLAll = avgPPL;
-          }
-      });
-      const pplRangeAll = maxAvgPPLAll - minAvgPPLAll;
+      const chartLabelsAll = sortedLabelsAll.map(lab => (lab.toLowerCase() === 'ppl' ? 'PPL (exp-norm)' : lab));
 
       const chartDatasetsAll = [];
       datasets.forEach((ds, index) => {
@@ -710,14 +678,9 @@
           }
           const val = metricsAvgAll[label] || 0;
           if (label.toLowerCase() === 'ppl') {
-            if (hasPPLAll && pplRangeAll > 0) {
-              // More than one dataset with different PPLs: Use relative normalization
-              const normalized = (val - minAvgPPLAll) / pplRangeAll;
-              return 1.0 - normalized;
-            } else {
-              // Only one dataset, or all have same PPL: Use a robust absolute scale
-              return val > 0 ? Math.min(1, 1 / val) : 0;
-            }
+            // Normalize using negative exponential: PPL_norm = e^(-k * PPL)
+            // Perfect model (PPL=1) → ~0.99, Poor model (PPL→∞) → 0
+            return val > 0 ? Math.exp(-PPL_K * val) : 0;
           }
           return val;
         });
