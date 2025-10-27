@@ -214,11 +214,16 @@ def score_edit(original_argument: str, edit: Dict[str, Any], baseline_scores: Di
     inappropriate_part = edit.get("inappropriate_part")
     rewritten_part = edit.get("rewritten_part")
 
-    # Validity (well-formed + substring in original)
+    # Validity: must have reason, at least one of inappropriate_part or rewritten_part,
+    # and if inappropriate_part exists, it must be found in the context
     edit_context = original_sentence_context if original_sentence_context is not None else original_argument
-    is_well_formed = bool(reason) and bool(inappropriate_part) and bool(rewritten_part) and (inappropriate_part in edit_context)
+    has_reason = bool(reason)
+    has_at_least_one = bool(inappropriate_part) or bool(rewritten_part)
+    substring_match = (not inappropriate_part) or (inappropriate_part in edit_context)
+    is_well_formed = has_reason and has_at_least_one and substring_match
+
     logger.info(f"Scoring edit: inappropriate_part='{inappropriate_part}', rewritten_part='{rewritten_part}', reason='{reason}'")
-    logger.info(f"is_well_formed: {is_well_formed}")
+    logger.info(f"is_well_formed: {is_well_formed} (reason={has_reason}, has_content={has_at_least_one}, substring_match={substring_match})")
 
     semantic_similarity = 0.0
     fluency_score = 0.0
@@ -432,6 +437,12 @@ def main(checkpoint_root: str, output_jsonl: str, use_base_model_only: bool = Fa
     def _trunc(text: str, max_len: int = 160) -> str:
         return text if len(text) <= max_len else text[: max_len - 3] + "..."
 
+
+
+
+
+
+
     start_all = time.time()
     with open(output_jsonl, "w", encoding="utf-8") as f_out:
         for idx, example in enumerate(eval_dataset):
@@ -492,12 +503,21 @@ def main(checkpoint_root: str, output_jsonl: str, use_base_model_only: bool = Fa
 
             try:
                 if parse_diff:
-                    parser = DirectLatexdiffParser()
-                    parsed_example = parser.parse_latex_diff(argument, rewritten_argument, "./temp_output")
-                    data, _ = fuzzy_post_process_edits([parsed_example])
-                    # Extract edits from parsed latex diff
-                    all_edits = data.get("edits", [])
-                    logger.info(f"Parsed {len(all_edits)} edits from latex diff")
+                    # Check if texts are different
+                    if argument.strip() == rewritten_argument.strip():
+                        logger.warning(f"Example {idx}: Source and rewritten text are identical, skipping")
+                        all_edits = []
+                    else:
+                        logger.info(f"Example {idx}: Parsing latex diff")
+                        logger.debug(f"Source length: {len(argument)}, Rewritten length: {len(rewritten_argument)}")
+                        parser = DirectLatexdiffParser()
+                        parsed_example = parser.parse_latex_diff(argument, rewritten_argument, "./temp_output")
+                        logger.info(f"LaTeX diff returned {len(parsed_example.get('edit_actions', []))} edit actions")
+                        parsed_example['before_revision'] = argument
+                        data, _ = fuzzy_post_process_edits([parsed_example])
+                        # Extract edits from parsed latex diff
+                        all_edits = data.get("edits", [])
+                        logger.info(f"After fuzzy post-processing: {len(all_edits)} edits extracted")
                 else:
                     # Use process_completion from ops (same as GRPO)
                     all_edits = process_completion(completion, sentences)
