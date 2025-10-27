@@ -1005,31 +1005,44 @@
               });
             });
 
+            // Transposed table: categories as columns, datasets as rows
             let predGtAllHtml = '<div style="overflow-x: auto;"><table style="width: 100%; border-collapse: collapse; font-size: 14px;">';
             predGtAllHtml += '<thead><tr style="border-bottom: 2px solid #e3e8f1;">';
-            predGtAllHtml += '<th style="text-align: left; padding: 8px; font-weight: 600;">Category</th>';
-            predGtAllHtml += '<th style="text-align: right; padding: 8px; font-weight: 600;">Pred. before</th>';
-            predGtAllHtml += '<th style="text-align: right; padding: 8px; font-weight: 600;">Ground truth</th>';
+            predGtAllHtml += '<th style="text-align: left; padding: 8px; font-weight: 600;">Model/Metric</th>';
 
-            // Add column for each dataset's "Pred. after"
-            predData.forEach(d => {
-              predGtAllHtml += `<th style="text-align: right; padding: 8px; font-weight: 600;">${escapeHtml(d.fileName)}</th>`;
+            // Add column for each category
+            categories.forEach(cat => {
+              predGtAllHtml += `<th style="text-align: right; padding: 8px; font-weight: 600;">${escapeHtml(cat)}</th>`;
             });
             predGtAllHtml += '</tr></thead><tbody>';
 
             const boldStyle = 'font-weight: 700;';
 
+            // Row 1: Pred. before (from first dataset)
+            predGtAllHtml += '<tr style="border-bottom: 1px solid #f0f0f0;">';
+            predGtAllHtml += '<td style="padding: 8px; font-weight: 600;">Pred. before</td>';
             categories.forEach(cat => {
-              predGtAllHtml += '<tr style="border-bottom: 1px solid #f0f0f0;">';
-              predGtAllHtml += `<td style="padding: 8px;">${escapeHtml(cat)}</td>`;
-
               const beforeVal = firstDataset.predBefore[cat];
-              const gtVal = firstDataset.groundTruth[cat];
               predGtAllHtml += `<td style="padding: 8px; text-align: right;">${beforeVal !== undefined ? beforeVal.toFixed(2) : '--'}</td>`;
-              predGtAllHtml += `<td style="padding: 8px; text-align: right;">${gtVal !== undefined ? gtVal.toFixed(2) : '--'}</td>`;
+            });
+            predGtAllHtml += '</tr>';
 
-              // Add "Pred. after" for each dataset, bold the minimum
-              predData.forEach(d => {
+            // Row 2: Ground truth (from first dataset)
+            predGtAllHtml += '<tr style="border-bottom: 1px solid #f0f0f0;">';
+            predGtAllHtml += '<td style="padding: 8px; font-weight: 600;">Ground truth</td>';
+            categories.forEach(cat => {
+              const gtVal = firstDataset.groundTruth[cat];
+              predGtAllHtml += `<td style="padding: 8px; text-align: right;">${gtVal !== undefined ? gtVal.toFixed(2) : '--'}</td>`;
+            });
+            predGtAllHtml += '</tr>';
+
+            // Rows for each dataset: Pred. after
+            predData.forEach((d, idx) => {
+              const rowStyle = idx === currentDatasetIndex ? 'background-color: #f0f7ff;' : '';
+              predGtAllHtml += `<tr style="${rowStyle} border-bottom: 1px solid #f0f0f0;">`;
+              predGtAllHtml += `<td style="padding: 8px;">${escapeHtml(d.fileName)}</td>`;
+
+              categories.forEach(cat => {
                 const afterVal = d.predAfter[cat];
                 const isBest = afterVal !== undefined && afterVal === minPredAfter[cat];
                 predGtAllHtml += `<td style="padding: 8px; text-align: right; ${isBest ? boldStyle : ''}">${afterVal !== undefined ? afterVal.toFixed(2) : '--'}</td>`;
