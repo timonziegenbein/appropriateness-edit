@@ -84,9 +84,8 @@ accelerate launch \
   --config_file ~/.cache/huggingface/accelerate/default_config.yaml \
   --main_process_port $MASTER_PORT \
   models/grpo.py \
-  --output_dir models/trained/grpo_global_sentence_only_fluency \
-  --resume_from_checkpoint models/trained/grpo_global_sentence_only_fluency \
+  --output_dir models/trained/grpo_global_sentence_v11 \
   --use_fluency \
-  --wandb_run_id tzjhn516 \
-  --disable_eval_on_start \
-  2>&1 | tee node1_training.log
+  --use_human_like \
+  --use_semantic_similarity \
+  --disable_eval_on_start
