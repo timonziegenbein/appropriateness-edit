@@ -704,27 +704,34 @@ def main(checkpoint_root: str, output_jsonl: str, use_base_model_only: bool = Fa
             for dim in _ANALYSIS_DIMS:
                 if dim in example:
                     try:
-                        gt_scores[dim] = float(example[dim])
-                    except Exception:
-                        pass
+                        val = example[dim]
+                        # Handle None, NaN, and empty strings
+                        if val is not None and val != '' and not (isinstance(val, float) and np.isnan(val)):
+                            gt_scores[dim] = float(val)
+                    except Exception as e:
+                        logger.debug(f"Could not convert ground truth {dim}={example[dim]} to float: {e}")
 
-            # Predicted scores for the same categories as ground truth, thresholded to {0,1}
+            # Predicted scores for all ANALYSIS_DIMS, thresholded to {0,1}
+            # We compute these for all dimensions, not just those with ground truth
             pred_scores_before: Dict[str, float] = {}
-            for dim in gt_scores.keys():
-                val = scores_before.get(dim)
-                pred_scores_before[dim] = 1.0 if (val is not None and float(val) >= 0.5) else 0.0
-
-            # Predicted scores for the same categories as ground truth, after perfect edits
             pred_scores_after: Dict[str, float] = {}
-            for dim in gt_scores.keys():
-                val = scores_after.get(dim)
-                pred_scores_after[dim] = 1.0 if (val is not None and float(val) > 0.5) else 0.0
-
-            # Predicted scores after ALL valid edits
             pred_scores_after_all: Dict[str, float] = {}
-            for dim in gt_scores.keys():
-                val = scores_after_all.get(dim)
-                pred_scores_after_all[dim] = 1.0 if (val is not None and float(val) > 0.5) else 0.0
+
+            for dim in _ANALYSIS_DIMS:
+                # Before edits
+                val_before = scores_before.get(dim)
+                if val_before is not None:
+                    pred_scores_before[dim] = 1.0 if float(val_before) >= 0.5 else 0.0
+
+                # After perfect edits
+                val_after = scores_after.get(dim)
+                if val_after is not None:
+                    pred_scores_after[dim] = 1.0 if float(val_after) >= 0.5 else 0.0
+
+                # After all valid edits
+                val_after_all = scores_after_all.get(dim)
+                if val_after_all is not None:
+                    pred_scores_after_all[dim] = 1.0 if float(val_after_all) >= 0.5 else 0.0
 
             record = {
                 "issue": issue,
