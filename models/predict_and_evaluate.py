@@ -411,11 +411,23 @@ def main(checkpoint_root: str, output_jsonl: str, use_base_model_only: bool = Fa
 
     # Load the exact validation set used in guided_grpo.py and keep only inappropriate examples
     if parse_diff:
+        # Create a mapping from post_id to ground truth scores before we replace eval_dataset
+        gt_scores_map = {}
+        for ex in eval_dataset:
+            post_id = ex.get('post_id')
+            if post_id:
+                gt_scores_map[post_id] = {dim: ex.get(dim) for dim in _ANALYSIS_DIMS if dim in ex}
+
         df1 = pd.read_csv('/mnt/home/tziegenb/appropriateness-feedback/src/annotation-interface/appropriateness-study-abs/data/study_edits_part1.csv')
         df2 = pd.read_csv('/mnt/home/tziegenb/appropriateness-feedback/src/annotation-interface/appropriateness-study-abs/data/study_edits_part2.csv')
         df = pd.concat([df1, df2], ignore_index=True)
         eval_ids = set(eval_dataset['post_id'])
         df = df[df['id'].isin(eval_ids)].sort_values(by=['id']).reset_index(drop=True)
+
+        # Add ground truth scores back to the dataframe
+        for dim in _ANALYSIS_DIMS:
+            df[dim] = df['id'].apply(lambda pid: gt_scores_map.get(pid, {}).get(dim, None))
+
         eval_dataset = Dataset.from_pandas(df)
 
     total_before_filter = len(eval_dataset)
