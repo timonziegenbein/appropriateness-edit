@@ -420,8 +420,8 @@ def main(checkpoint_root: str, output_jsonl: str, use_base_model_only: bool = Fa
 
     total_before_filter = len(eval_dataset)
     # Limit to 1 sample for debugging purposes
-    limited_n = min(10, len(eval_dataset))
-    eval_dataset = eval_dataset.select(range(limited_n))
+    #limited_n = min(10, len(eval_dataset))
+    #eval_dataset = eval_dataset.select(range(limited_n))
     num_examples = len(eval_dataset)
     logger.info(f"Loaded validation dataset: {total_before_filter} examples; filtered to inappropriate and limited: {num_examples}")
 
