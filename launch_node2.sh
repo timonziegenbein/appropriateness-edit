@@ -84,6 +84,6 @@ accelerate launch \
   --config_file ~/.cache/huggingface/accelerate/default_config.yaml \
   --main_process_port $MASTER_PORT \
   models/grpo.py \
-  --output_dir models/trained/grpo_global_sentence_no_semantic_similarity \
+  --output_dir models/trained/grpo_global_sentence_no_fluency \
   --use_human_like \
-  --use_fluency
+  --use_semantic_similarity
