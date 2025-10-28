@@ -755,6 +755,7 @@ def main(checkpoint_root: str, output_jsonl: str, use_base_model_only: bool = Fa
                 "ground_truth_scores": gt_scores,
                 "predicted_scores_before": pred_scores_before,
                 "predicted_scores_after": pred_scores_after,
+                "predicted_scores_after_all": pred_scores_after_all,
                 "edits": scored_edits,
             }
             f_out.write(json.dumps(record, ensure_ascii=False) + "\n")

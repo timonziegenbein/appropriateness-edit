@@ -449,8 +449,10 @@
       <div id="dataset-argument-metrics"></div>
       <h3 style="margin-top: 24px; margin-bottom: 12px;">Edit-Level Metrics (All Datasets)</h3>
       <div id="dataset-edit-metrics"></div>
-      <h3 style="margin-top: 24px; margin-bottom: 12px;">Predictions vs Ground Truth (All Datasets)</h3>
+      <h3 style="margin-top: 24px; margin-bottom: 12px;">Predictions vs Ground Truth - Perfect Edits (All Datasets)</h3>
       <div id="dataset-pred-gt-all"></div>
+      <h3 style="margin-top: 24px; margin-bottom: 12px;">Predictions vs Ground Truth - All Valid Edits (All Datasets)</h3>
+      <div id="dataset-pred-gt-all-edits"></div>
     </div>
     <div class="editor-container">
       <div class="left-pane">
@@ -529,6 +531,7 @@
       const argumentMetricsDiv = document.getElementById('dataset-argument-metrics');
       const editMetricsDiv = document.getElementById('dataset-edit-metrics');
       const datasetPredGtAllDiv = document.getElementById('dataset-pred-gt-all');
+      const datasetPredGtAllEditsDiv = document.getElementById('dataset-pred-gt-all-edits');
 
       if (!datasets || datasets.length === 0 || !container) {
         if(container) container.style.display = 'none';
@@ -1058,6 +1061,120 @@
           }
         } else {
           datasetPredGtAllDiv.innerHTML = '<div style="color: #999; font-style: italic;">No prediction data available.</div>';
+        }
+      }
+
+      // --- 7. RENDER PREDICTIONS VS GROUND TRUTH FOR ALL VALID EDITS (all datasets) ---
+      if (datasetPredGtAllEditsDiv && datasets.length > 0) {
+        // Collect predictions from all datasets using ALL valid edits
+        const predDataAll = [];
+        datasets.forEach((ds, idx) => {
+          const stats = ds.datasetStats;
+          const totalEx = stats.totalExamples || 0;
+          if (totalEx > 0) {
+            const predBefore = {};
+            const predAfterAll = {};
+            const gt = {};
+
+            for (const key in stats.predictedBeforeSums) {
+              predBefore[key] = stats.predictedBeforeSums[key] / totalEx;
+            }
+            for (const key in stats.predictedAfterAllSums) {
+              predAfterAll[key] = stats.predictedAfterAllSums[key] / totalEx;
+            }
+            for (const key in stats.groundTruthSums) {
+              gt[key] = stats.groundTruthSums[key] / totalEx;
+            }
+
+            predDataAll.push({
+              idx: idx,
+              fileName: ds.fileName,
+              predBefore: predBefore,
+              predAfterAll: predAfterAll,
+              groundTruth: gt
+            });
+          }
+        });
+
+        if (predDataAll.length > 0) {
+          // Get all categories from any dataset
+          const allCategoriesAll = new Set();
+          predDataAll.forEach(d => {
+            Object.keys(d.predBefore).forEach(k => allCategoriesAll.add(k));
+            Object.keys(d.predAfterAll).forEach(k => allCategoriesAll.add(k));
+            Object.keys(d.groundTruth).forEach(k => allCategoriesAll.add(k));
+          });
+          const categoriesAll = Array.from(allCategoriesAll).sort();
+
+          if (categoriesAll.length > 0) {
+            // Use first dataset for "Pred. before" and "Ground truth" (assuming same for all)
+            const firstDatasetAll = predDataAll[0];
+
+            // Find minimum "Pred. after (all edits)" for each category (lower is better)
+            const minPredAfterAll = {};
+            categoriesAll.forEach(cat => {
+              minPredAfterAll[cat] = Infinity;
+              predDataAll.forEach(d => {
+                const val = d.predAfterAll[cat];
+                if (val !== undefined && val < minPredAfterAll[cat]) {
+                  minPredAfterAll[cat] = val;
+                }
+              });
+            });
+
+            // Transposed table: categories as columns, datasets as rows
+            let predGtAllEditsHtml = '<div style="overflow-x: auto;"><table style="width: 100%; border-collapse: collapse; font-size: 14px;">';
+            predGtAllEditsHtml += '<thead><tr style="border-bottom: 2px solid #e3e8f1;">';
+            predGtAllEditsHtml += '<th style="text-align: left; padding: 8px; font-weight: 600;">Model/Metric</th>';
+
+            // Add column for each category
+            categoriesAll.forEach(cat => {
+              predGtAllEditsHtml += `<th style="text-align: right; padding: 8px; font-weight: 600;">${escapeHtml(cat)}</th>`;
+            });
+            predGtAllEditsHtml += '</tr></thead><tbody>';
+
+            const boldStyle = 'font-weight: 700;';
+
+            // Row 1: Pred. before (from first dataset)
+            predGtAllEditsHtml += '<tr style="border-bottom: 1px solid #f0f0f0;">';
+            predGtAllEditsHtml += '<td style="padding: 8px; font-weight: 600;">Pred. before</td>';
+            categoriesAll.forEach(cat => {
+              const beforeVal = firstDatasetAll.predBefore[cat];
+              predGtAllEditsHtml += `<td style="padding: 8px; text-align: right;">${beforeVal !== undefined ? beforeVal.toFixed(2) : '--'}</td>`;
+            });
+            predGtAllEditsHtml += '</tr>';
+
+            // Row 2: Ground truth (from first dataset)
+            predGtAllEditsHtml += '<tr style="border-bottom: 1px solid #f0f0f0;">';
+            predGtAllEditsHtml += '<td style="padding: 8px; font-weight: 600;">Ground truth</td>';
+            categoriesAll.forEach(cat => {
+              const gtVal = firstDatasetAll.groundTruth[cat];
+              predGtAllEditsHtml += `<td style="padding: 8px; text-align: right;">${gtVal !== undefined ? gtVal.toFixed(2) : '--'}</td>`;
+            });
+            predGtAllEditsHtml += '</tr>';
+
+            // Rows for each dataset: Pred. after (all valid edits)
+            predDataAll.forEach((d, idx) => {
+              const rowStyle = idx === currentDatasetIndex ? 'background-color: #f0f7ff;' : '';
+              predGtAllEditsHtml += `<tr style="${rowStyle} border-bottom: 1px solid #f0f0f0;">`;
+              predGtAllEditsHtml += `<td style="padding: 8px;">${escapeHtml(d.fileName)}</td>`;
+
+              categoriesAll.forEach(cat => {
+                const afterVal = d.predAfterAll[cat];
+                const isBest = afterVal !== undefined && afterVal === minPredAfterAll[cat];
+                predGtAllEditsHtml += `<td style="padding: 8px; text-align: right; ${isBest ? boldStyle : ''}">${afterVal !== undefined ? afterVal.toFixed(2) : '--'}</td>`;
+              });
+
+              predGtAllEditsHtml += '</tr>';
+            });
+
+            predGtAllEditsHtml += '</tbody></table></div>';
+            datasetPredGtAllEditsDiv.innerHTML = predGtAllEditsHtml;
+          } else {
+            datasetPredGtAllEditsDiv.innerHTML = '<div style="color: #999; font-style: italic;">No prediction data available.</div>';
+          }
+        } else {
+          datasetPredGtAllEditsDiv.innerHTML = '<div style="color: #999; font-style: italic;">No prediction data available.</div>';
         }
       }
 
@@ -1846,6 +1963,7 @@
             predictedSums: {},
             predictedBeforeSums: {},
             predictedAfterSums: {},
+            predictedAfterAllSums: {},
             metricsSums: {},
             metricsAllSums: {},
             groundTruthSums: {}
@@ -1893,10 +2011,16 @@
                   dataset.datasetStats.predictedBeforeSums[key] = (dataset.datasetStats.predictedBeforeSums[key] || 0) + Number(val || 0);
                 }
               }
-              // Accumulate predicted scores after edits
+              // Accumulate predicted scores after edits (perfect edits only)
               if (obj.predicted_scores_after && typeof obj.predicted_scores_after === 'object') {
                 for (const [key, val] of Object.entries(obj.predicted_scores_after)) {
                   dataset.datasetStats.predictedAfterSums[key] = (dataset.datasetStats.predictedAfterSums[key] || 0) + Number(val || 0);
+                }
+              }
+              // Accumulate predicted scores after all valid edits
+              if (obj.predicted_scores_after_all && typeof obj.predicted_scores_after_all === 'object') {
+                for (const [key, val] of Object.entries(obj.predicted_scores_after_all)) {
+                  dataset.datasetStats.predictedAfterAllSums[key] = (dataset.datasetStats.predictedAfterAllSums[key] || 0) + Number(val || 0);
                 }
               }
               // Accumulate metrics if provided (alternative to predicted scores)

@@ -88,4 +88,7 @@ accelerate launch \
   --use_fluency \
   --use_human_like \
   --use_semantic_similarity \
-  --disable_eval_on_start
+  --disable_eval_on_start \
+  --resume_from_checkpoint models/trained/grpo_global_sentence_v11 \
+  --wandb_run_id 1t179ut9
+
