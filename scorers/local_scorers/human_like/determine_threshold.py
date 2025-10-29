@@ -31,7 +31,7 @@ from tqdm import tqdm
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from scorers.human_like.model_defs import LanguageModel
+from scorers.local_scorers.human_like.model_defs import LanguageModel
 
 
 def load_model(model_path, device):

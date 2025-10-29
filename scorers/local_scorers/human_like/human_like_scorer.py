@@ -7,7 +7,7 @@ from typing import List, Dict
 from transformers import AutoTokenizer
 import weave
 
-from scorers.human_like.model_defs import LanguageModel
+from scorers.local_scorers.human_like.model_defs import LanguageModel
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 hl_vocab = {'<pad>': 0, 'keep': 1, 'del': 2, 'add': 3, 'replace': 4, 'keep-in-edit': 5}
 
 class HumanLikeScorer:
-    def __init__(self, device, model_path="scorers/human_like/models/human_like_v4.pth",
+    def __init__(self, device, model_path="scorers/local_scorers/human_like/models/human_like_v4.pth",
                  threshold=2.452725653648376, max_len=500):
         """
         Initialize HumanLikeScorer.

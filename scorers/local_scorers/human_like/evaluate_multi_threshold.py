@@ -34,7 +34,7 @@ from datasets import load_dataset
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from scorers.human_like.model_defs import LanguageModel
+from scorers.local_scorers.human_like.model_defs import LanguageModel
 
 
 # Global cache for models (outside the Weave Model class to avoid serialization issues)

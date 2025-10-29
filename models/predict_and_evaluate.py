@@ -30,10 +30,13 @@ from bert_score import BERTScorer
 from trl import GRPOConfig, GRPOTrainer
 
 from prompts.edit_inappropriate_text import create_llm_prompt
-from scorers.fluency.fluency_scorer import FluencyScorer
+from scorers.local_scorers.fluency.fluency_scorer import FluencyScorer
 from scorers.appropriateness.appropriateness_scorer import AppropriatenessScorer
-from scorers.semantic_similarity.semantic_similarity_scorer import SemanticSimilarityScorer
-from scorers.human_like.human_like_scorer import HumanLikeScorer
+from scorers.local_scorers.semantic_similarity.semantic_similarity_scorer import SemanticSimilarityScorer
+from scorers.local_scorers.human_like.human_like_scorer import HumanLikeScorer
+from scorers.global_scorers.semantic_similarity.global_semantic_similarity_scorer import GlobalSemanticSimilarityScorer
+from scorers.global_scorers.human_like.global_human_like_scorer import GlobalHumanLikeScorer
+from scorers.global_scorers.fluency.global_fluency_scorer import GlobalFluencyScorer
 from ops.completion_processor import process_completion
 from ops.prompt_processor import process_prompt
 from ops.edit_applier import apply_edits_to_argument
@@ -124,12 +127,18 @@ _cuda_available = torch.cuda.is_available()
 _local_rank = int(os.environ.get("LOCAL_RANK", 0)) if _cuda_available else 0
 _device = torch.device(f"cuda:{_local_rank}" if _cuda_available else "cpu")
 
-# Initialize scorers
-logger.info("Loading scorers...")
+# Initialize local scorers
+logger.info("Loading local scorers...")
 _semantic_similarity_scorer = SemanticSimilarityScorer(_device)
 _human_like_scorer = HumanLikeScorer(_device)  # Uses v4 model and P99 threshold by default
 _fluency_scorer = FluencyScorer(_device)
 _appropriateness_scorer = AppropriatenessScorer(_device)
+
+# Initialize global scorers
+logger.info("Loading global scorers...")
+_global_semantic_similarity_scorer = GlobalSemanticSimilarityScorer(_device, threshold=0.80)
+_global_human_like_scorer = GlobalHumanLikeScorer(_device, threshold=5.0)
+_global_fluency_scorer = GlobalFluencyScorer(_device)
 
 # BERTScorer for document-level similarity
 _bert_scorer = BERTScorer(model_type="microsoft/deberta-xlarge-mnli", rescale_with_baseline=True, lang="en", batch_size=1, device=_device)
@@ -699,6 +708,64 @@ def main(checkpoint_root: str, output_jsonl: str, use_base_model_only: bool = Fa
             except Exception:
                 gm_score_all = 0.0
 
+            # Global scorer metrics (for perfect edits)
+            global_ss_binary, global_ss_score = 0.0, 0.0
+            global_hl_binary, global_hl_perplexity = 0.0, float('inf')
+            global_fluency_binary, global_fluency_confidence = 0.0, 0.0
+
+            try:
+                # Global semantic similarity (perfect edits)
+                global_ss_binary, global_ss_score = _global_semantic_similarity_scorer.calculate_global_semantic_similarity(
+                    argument, argument_after_edits
+                )
+            except Exception as e:
+                logger.error(f"Global semantic similarity (perfect) failed: {e}")
+
+            try:
+                # Global human-likeness (perfect edits)
+                global_hl_binary, global_hl_perplexity = _global_human_like_scorer.calculate_global_human_likeness(
+                    argument, perfect_edits
+                )
+            except Exception as e:
+                logger.error(f"Global human-likeness (perfect) failed: {e}")
+
+            try:
+                # Global fluency (perfect edits)
+                global_fluency_binary, global_fluency_confidence = _global_fluency_scorer.calculate_global_fluency(
+                    argument, argument_after_edits
+                )
+            except Exception as e:
+                logger.error(f"Global fluency (perfect) failed: {e}")
+
+            # Global scorer metrics (for all valid edits)
+            global_ss_binary_all, global_ss_score_all = 0.0, 0.0
+            global_hl_binary_all, global_hl_perplexity_all = 0.0, float('inf')
+            global_fluency_binary_all, global_fluency_confidence_all = 0.0, 0.0
+
+            try:
+                # Global semantic similarity (all valid edits)
+                global_ss_binary_all, global_ss_score_all = _global_semantic_similarity_scorer.calculate_global_semantic_similarity(
+                    argument, argument_after_all_edits
+                )
+            except Exception as e:
+                logger.error(f"Global semantic similarity (all) failed: {e}")
+
+            try:
+                # Global human-likeness (all valid edits)
+                global_hl_binary_all, global_hl_perplexity_all = _global_human_like_scorer.calculate_global_human_likeness(
+                    argument, all_valid_edits
+                )
+            except Exception as e:
+                logger.error(f"Global human-likeness (all) failed: {e}")
+
+            try:
+                # Global fluency (all valid edits)
+                global_fluency_binary_all, global_fluency_confidence_all = _global_fluency_scorer.calculate_global_fluency(
+                    argument, argument_after_all_edits
+                )
+            except Exception as e:
+                logger.error(f"Global fluency (all) failed: {e}")
+
             # Ground truth scores (if available in dataset)
             gt_scores: Dict[str, float] = {}
             for dim in _ANALYSIS_DIMS:
@@ -751,6 +818,22 @@ def main(checkpoint_root: str, output_jsonl: str, use_base_model_only: bool = Fa
                     "NES": nes_score_all,
                     "PPL": ppl_score_all,
                     "GM": gm_score_all,
+                },
+                "global_scores": {
+                    "semantic_similarity_binary": global_ss_binary,
+                    "semantic_similarity_score": global_ss_score,
+                    "human_like_binary": global_hl_binary,
+                    "human_like_perplexity": global_hl_perplexity,
+                    "fluency_binary": global_fluency_binary,
+                    "fluency_confidence": global_fluency_confidence,
+                },
+                "global_scores_all": {
+                    "semantic_similarity_binary": global_ss_binary_all,
+                    "semantic_similarity_score": global_ss_score_all,
+                    "human_like_binary": global_hl_binary_all,
+                    "human_like_perplexity": global_hl_perplexity_all,
+                    "fluency_binary": global_fluency_binary_all,
+                    "fluency_confidence": global_fluency_confidence_all,
                 },
                 "ground_truth_scores": gt_scores,
                 "predicted_scores_before": pred_scores_before,

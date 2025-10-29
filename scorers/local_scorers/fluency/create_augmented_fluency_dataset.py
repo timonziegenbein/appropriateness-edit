@@ -269,7 +269,7 @@ def main():
     parser.add_argument(
         "--traces-file",
         type=Path,
-        default=Path("scorers/fluency/fluency_traces_export.jsonl"),
+        default=Path("scorers/local_scorers/fluency/fluency_traces_export.jsonl"),
         help="Path to the JSONL traces export file"
     )
     parser.add_argument(

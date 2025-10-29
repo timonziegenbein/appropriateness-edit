@@ -86,4 +86,7 @@ accelerate launch \
   models/grpo.py \
   --output_dir models/trained/grpo_global_sentence_no_fluency \
   --use_human_like \
-  --use_semantic_similarity
+  --use_semantic_similarity \
+  --disable_eval_on_start \
+  --resume_from_checkpoint models/trained/grpo_global_sentence_no_fluency \
+  --wandb_run_id be4d4vtq

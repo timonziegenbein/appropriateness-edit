@@ -19,7 +19,7 @@ from sklearn.metrics import confusion_matrix, classification_report
 import seaborn as sns
 from typing import Tuple, List
 
-from scorers.human_like.model_defs import LanguageModel
+from scorers.local_scorers.human_like.model_defs import LanguageModel
 
 
 def calculate_perplexity_for_sequence(sequence: str, model: nn.Module, vocab: dict,

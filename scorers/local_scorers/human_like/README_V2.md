@@ -93,7 +93,7 @@ vocab = {
    - Can accept `sents_char_pos` parameter for filtering
 
    ```python
-   from scorers.human_like.human_like_scorer_v2 import HumanLikeScorerV2
+   from scorers.local_scorers.human_like.human_like_scorer_v2 import HumanLikeScorerV2
 
    scorer = HumanLikeScorerV2(device=torch.device("cuda:0"))
 
@@ -201,7 +201,7 @@ For each document with edits:
 To use v2 in the GRPO training pipeline, update `models/grpo.py`:
 
 ```python
-from scorers.human_like.human_like_scorer_v2 import HumanLikeScorerV2
+from scorers.local_scorers.human_like.human_like_scorer_v2 import HumanLikeScorerV2
 
 # Replace initialization
 human_like_scorer = HumanLikeScorerV2(device)

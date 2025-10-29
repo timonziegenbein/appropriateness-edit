@@ -12,9 +12,9 @@ import weave
 
 from prompts.edit_inappropriate_text import create_llm_prompt
 from scorers.reward_functions import global_appropriateness_reward, dense_local_appropriateness_reward
-from scorers.semantic_similarity.semantic_similarity_scorer import SemanticSimilarityScorer
-from scorers.human_like.human_like_scorer import HumanLikeScorer
-from scorers.fluency.fluency_scorer import FluencyScorer
+from scorers.local_scorers.semantic_similarity.semantic_similarity_scorer import SemanticSimilarityScorer
+from scorers.local_scorers.human_like.human_like_scorer import HumanLikeScorer
+from scorers.local_scorers.fluency.fluency_scorer import FluencyScorer
 from scorers.appropriateness.appropriateness_scorer import AppropriatenessScorer
 
 # --- Logging Setup ---

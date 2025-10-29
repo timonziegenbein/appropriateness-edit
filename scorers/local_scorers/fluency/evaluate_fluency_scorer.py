@@ -30,7 +30,7 @@ import json
 from google import genai
 import asyncio
 
-from scorers.fluency.fluency_scorer import FluencyScorer
+from scorers.local_scorers.fluency.fluency_scorer import FluencyScorer
 
 # Import dependencies for TraditionalFluencyScorer
 import re

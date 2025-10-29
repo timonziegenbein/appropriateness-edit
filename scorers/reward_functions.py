@@ -8,7 +8,7 @@ import weave
 from functools import lru_cache
 import hashlib
 
-from scorers.semantic_similarity.semantic_similarity_scorer import SemanticSimilarityScorer
+from scorers.local_scorers.semantic_similarity.semantic_similarity_scorer import SemanticSimilarityScorer
 
 logger = logging.getLogger(__name__)
 

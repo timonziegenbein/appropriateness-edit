@@ -7,7 +7,7 @@ from typing import List, Dict, Tuple, Optional
 from transformers import AutoTokenizer
 import weave
 
-from scorers.human_like.model_defs import LanguageModel
+from scorers.local_scorers.human_like.model_defs import LanguageModel
 
 logger = logging.getLogger(__name__)
 
@@ -39,13 +39,13 @@ class HumanLikeScorerV2:
         # Try to load v2 model, fallback to v1 if not available
         try:
             human_like_model.load_state_dict(
-                torch.load("scorers/human_like/human_like_language_model_v3.pth", map_location=device)
+                torch.load("scorers/local_scorers/human_like/human_like_language_model_v3.pth", map_location=device)
             )
             logger.info("Loaded v3 model (sentence-level with keep-in-edit)")
         except FileNotFoundError:
             logger.warning("v3 model not found, using v2 model")
             human_like_model.load_state_dict(
-                torch.load("scorers/human_like/human_like_language_model_v2.pth", map_location=device)
+                torch.load("scorers/local_scorers/human_like/human_like_language_model_v2.pth", map_location=device)
             )
 
         human_like_model.eval()

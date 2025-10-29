@@ -24,7 +24,7 @@ from datasets import load_dataset
 import logging
 import numpy as np
 
-from scorers.human_like.model_defs import LanguageModel
+from scorers.local_scorers.human_like.model_defs import LanguageModel
 import torch.nn as nn
 
 logging.basicConfig(level=logging.INFO)
@@ -449,7 +449,7 @@ def main():
 
     # Model options
     parser.add_argument("--model-path", type=str,
-                       default="scorers/human_like/human_like_language_model_v3.pth",
+                       default="scorers/local_scorers/human_like/human_like_language_model_v3.pth",
                        help="Path to trained model (.pth file)")
     parser.add_argument("--vocab-type", type=str, default="v2", choices=["v1", "v2"],
                        help="Vocabulary type (v1: 5 tokens, v2: 6 tokens with keep-in-edit)")
