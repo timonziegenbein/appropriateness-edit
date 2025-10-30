@@ -461,7 +461,7 @@
       <div id="dataset-global-scores-table-all"></div>
       <h3 style="margin-top: 24px; margin-bottom: 12px;">Argument-Level Metrics - Perfect Edits</h3>
       <div id="dataset-argument-metrics-perfect"></div>
-      <h3 style="margin-top: 24px; margin-bottom: 12px;">Argument-Level Metrics</h3>
+      <h3 style="margin-top: 24px; margin-bottom: 12px;">Argument-Level Metrics - All Edits</h3>
       <div id="dataset-argument-metrics"></div>
       <h3 style="margin-top: 24px; margin-bottom: 12px;">Edit-Level Metrics</h3>
       <div id="dataset-edit-metrics"></div>
@@ -1120,16 +1120,16 @@
         argumentMetricsPerfectDiv.innerHTML = '<div style="color: #999; font-style: italic;">No argument-level metrics data available.</div>';
       }
 
-      // --- 6. RENDER ARGUMENT-LEVEL METRICS TABLE (all datasets) ---
+      // --- 6. RENDER ARGUMENT-LEVEL METRICS TABLE - ALL EDITS (all datasets) ---
       // First pass: collect all values and find max for each column
       const argMetricsData = [];
       const argMaxValues = {
         examples: -Infinity,
-        appPerfect: -Infinity, appAll: -Infinity,
-        simPerfect: -Infinity, simAll: -Infinity,
-        nesPerfect: -Infinity, nesAll: -Infinity,
-        pplPerfect: -Infinity, pplAll: -Infinity,
-        gmPerfect: -Infinity, gmAll: -Infinity
+        app: -Infinity,
+        sim: -Infinity,
+        nes: -Infinity,
+        ppl: Infinity, // Lower is better for PPL
+        gm: -Infinity
       };
 
       datasets.forEach((ds, idx) => {
@@ -1140,31 +1140,21 @@
           idx: idx,
           fileName: ds.fileName,
           examples: totalEx,
-          appPerfect: totalEx > 0 ? stats.metricsSums.App / totalEx : null,
-          simPerfect: totalEx > 0 ? stats.metricsSums.Sim / totalEx : null,
-          nesPerfect: totalEx > 0 ? stats.metricsSums.NES / totalEx : null,
-          pplPerfect: totalEx > 0 ? stats.metricsSums.PPL / totalEx : null,
-          gmPerfect: totalEx > 0 ? stats.metricsSums.GM / totalEx : null,
-          appAll: totalEx > 0 ? stats.metricsAllSums.App / totalEx : null,
-          simAll: totalEx > 0 ? stats.metricsAllSums.Sim / totalEx : null,
-          nesAll: totalEx > 0 ? stats.metricsAllSums.NES / totalEx : null,
-          pplAll: totalEx > 0 ? stats.metricsAllSums.PPL / totalEx : null,
-          gmAll: totalEx > 0 ? stats.metricsAllSums.GM / totalEx : null
+          app: totalEx > 0 ? stats.metricsAllSums.App / totalEx : null,
+          sim: totalEx > 0 ? stats.metricsAllSums.Sim / totalEx : null,
+          nes: totalEx > 0 ? stats.metricsAllSums.NES / totalEx : null,
+          ppl: totalEx > 0 ? stats.metricsAllSums.PPL / totalEx : null,
+          gm: totalEx > 0 ? stats.metricsAllSums.GM / totalEx : null
         };
         argMetricsData.push(row);
 
         // Track max values (note: for PPL, lower is better, so we track min)
         if (row.examples > argMaxValues.examples) argMaxValues.examples = row.examples;
-        if (row.appPerfect !== null && row.appPerfect > argMaxValues.appPerfect) argMaxValues.appPerfect = row.appPerfect;
-        if (row.appAll !== null && row.appAll > argMaxValues.appAll) argMaxValues.appAll = row.appAll;
-        if (row.simPerfect !== null && row.simPerfect > argMaxValues.simPerfect) argMaxValues.simPerfect = row.simPerfect;
-        if (row.simAll !== null && row.simAll > argMaxValues.simAll) argMaxValues.simAll = row.simAll;
-        if (row.nesPerfect !== null && row.nesPerfect > argMaxValues.nesPerfect) argMaxValues.nesPerfect = row.nesPerfect;
-        if (row.nesAll !== null && row.nesAll > argMaxValues.nesAll) argMaxValues.nesAll = row.nesAll;
-        if (row.pplPerfect !== null && row.pplPerfect < argMaxValues.pplPerfect) argMaxValues.pplPerfect = row.pplPerfect;
-        if (row.pplAll !== null && row.pplAll < argMaxValues.pplAll) argMaxValues.pplAll = row.pplAll;
-        if (row.gmPerfect !== null && row.gmPerfect > argMaxValues.gmPerfect) argMaxValues.gmPerfect = row.gmPerfect;
-        if (row.gmAll !== null && row.gmAll > argMaxValues.gmAll) argMaxValues.gmAll = row.gmAll;
+        if (row.app !== null && row.app > argMaxValues.app) argMaxValues.app = row.app;
+        if (row.sim !== null && row.sim > argMaxValues.sim) argMaxValues.sim = row.sim;
+        if (row.nes !== null && row.nes > argMaxValues.nes) argMaxValues.nes = row.nes;
+        if (row.ppl !== null && row.ppl < argMaxValues.ppl) argMaxValues.ppl = row.ppl;
+        if (row.gm !== null && row.gm > argMaxValues.gm) argMaxValues.gm = row.gm;
       });
 
       // Second pass: render table with bold for max values
@@ -1172,16 +1162,11 @@
       argMetricsHtml += '<thead><tr style="border-bottom: 2px solid #e3e8f1;">';
       argMetricsHtml += '<th style="text-align: left; padding: 8px; font-weight: 600;">Dataset</th>';
       argMetricsHtml += '<th style="text-align: right; padding: 8px; font-weight: 600;">Examples</th>';
-      argMetricsHtml += '<th style="text-align: right; padding: 8px; font-weight: 600;">App (Perfect)</th>';
-      argMetricsHtml += '<th style="text-align: right; padding: 8px; font-weight: 600;">App (All)</th>';
-      argMetricsHtml += '<th style="text-align: right; padding: 8px; font-weight: 600;">Sim (Perfect)</th>';
-      argMetricsHtml += '<th style="text-align: right; padding: 8px; font-weight: 600;">Sim (All)</th>';
-      argMetricsHtml += '<th style="text-align: right; padding: 8px; font-weight: 600;">NES (Perfect)</th>';
-      argMetricsHtml += '<th style="text-align: right; padding: 8px; font-weight: 600;">NES (All)</th>';
-      argMetricsHtml += '<th style="text-align: right; padding: 8px; font-weight: 600;">PPL (Perfect)</th>';
-      argMetricsHtml += '<th style="text-align: right; padding: 8px; font-weight: 600;">PPL (All)</th>';
-      argMetricsHtml += '<th style="text-align: right; padding: 8px; font-weight: 600;">GM (Perfect)</th>';
-      argMetricsHtml += '<th style="text-align: right; padding: 8px; font-weight: 600;">GM (All)</th>';
+      argMetricsHtml += '<th style="text-align: right; padding: 8px; font-weight: 600;">App</th>';
+      argMetricsHtml += '<th style="text-align: right; padding: 8px; font-weight: 600;">Sim</th>';
+      argMetricsHtml += '<th style="text-align: right; padding: 8px; font-weight: 600;">NES</th>';
+      argMetricsHtml += '<th style="text-align: right; padding: 8px; font-weight: 600;">PPL</th>';
+      argMetricsHtml += '<th style="text-align: right; padding: 8px; font-weight: 600;">GM</th>';
       argMetricsHtml += '</tr></thead><tbody>';
 
       argMetricsData.forEach((row) => {
@@ -1191,16 +1176,11 @@
         argMetricsHtml += `<tr style="${rowStyle} border-bottom: 1px solid #f0f0f0;">`;
         argMetricsHtml += `<td style="padding: 8px;">${escapeHtml(row.fileName)}</td>`;
         argMetricsHtml += `<td style="padding: 8px; text-align: right; ${row.examples === argMaxValues.examples ? boldStyle : ''}">${row.examples}</td>`;
-        argMetricsHtml += `<td style="padding: 8px; text-align: right; ${row.appPerfect === argMaxValues.appPerfect ? boldStyle : ''}">${row.appPerfect !== null ? row.appPerfect.toFixed(2) : '--'}</td>`;
-        argMetricsHtml += `<td style="padding: 8px; text-align: right; ${row.appAll === argMaxValues.appAll ? boldStyle : ''}">${row.appAll !== null ? row.appAll.toFixed(2) : '--'}</td>`;
-        argMetricsHtml += `<td style="padding: 8px; text-align: right; ${row.simPerfect === argMaxValues.simPerfect ? boldStyle : ''}">${row.simPerfect !== null ? row.simPerfect.toFixed(2) : '--'}</td>`;
-        argMetricsHtml += `<td style="padding: 8px; text-align: right; ${row.simAll === argMaxValues.simAll ? boldStyle : ''}">${row.simAll !== null ? row.simAll.toFixed(2) : '--'}</td>`;
-        argMetricsHtml += `<td style="padding: 8px; text-align: right; ${row.nesPerfect === argMaxValues.nesPerfect ? boldStyle : ''}">${row.nesPerfect !== null ? row.nesPerfect.toFixed(2) : '--'}</td>`;
-        argMetricsHtml += `<td style="padding: 8px; text-align: right; ${row.nesAll === argMaxValues.nesAll ? boldStyle : ''}">${row.nesAll !== null ? row.nesAll.toFixed(2) : '--'}</td>`;
-        argMetricsHtml += `<td style="padding: 8px; text-align: right; ${row.pplPerfect === argMaxValues.pplPerfect ? boldStyle : ''}">${row.pplPerfect !== null ? row.pplPerfect.toFixed(2) : '--'}</td>`;
-        argMetricsHtml += `<td style="padding: 8px; text-align: right; ${row.pplAll === argMaxValues.pplAll ? boldStyle : ''}">${row.pplAll !== null ? row.pplAll.toFixed(2) : '--'}</td>`;
-        argMetricsHtml += `<td style="padding: 8px; text-align: right; ${row.gmPerfect === argMaxValues.gmPerfect ? boldStyle : ''}">${row.gmPerfect !== null ? row.gmPerfect.toFixed(2) : '--'}</td>`;
-        argMetricsHtml += `<td style="padding: 8px; text-align: right; ${row.gmAll === argMaxValues.gmAll ? boldStyle : ''}">${row.gmAll !== null ? row.gmAll.toFixed(2) : '--'}</td>`;
+        argMetricsHtml += `<td style="padding: 8px; text-align: right; ${row.app === argMaxValues.app ? boldStyle : ''}">${row.app !== null ? row.app.toFixed(2) : '--'}</td>`;
+        argMetricsHtml += `<td style="padding: 8px; text-align: right; ${row.sim === argMaxValues.sim ? boldStyle : ''}">${row.sim !== null ? row.sim.toFixed(2) : '--'}</td>`;
+        argMetricsHtml += `<td style="padding: 8px; text-align: right; ${row.nes === argMaxValues.nes ? boldStyle : ''}">${row.nes !== null ? row.nes.toFixed(2) : '--'}</td>`;
+        argMetricsHtml += `<td style="padding: 8px; text-align: right; ${row.ppl === argMaxValues.ppl ? boldStyle : ''}">${row.ppl !== null ? row.ppl.toFixed(2) : '--'}</td>`;
+        argMetricsHtml += `<td style="padding: 8px; text-align: right; ${row.gm === argMaxValues.gm ? boldStyle : ''}">${row.gm !== null ? row.gm.toFixed(2) : '--'}</td>`;
         argMetricsHtml += '</tr>';
       });
 
