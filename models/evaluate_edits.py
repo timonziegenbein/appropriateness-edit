@@ -433,20 +433,9 @@ def main(
             except Exception:
                 ppl_score_all = float("inf")
 
-            # Geometric mean
+            # Binary appropriateness flags (GM will be computed in interface from aggregated values)
             app_bin = 1.0 if flipped else 0.0
-            inv_ppl = 0.0 if not np.isfinite(ppl_score) or ppl_score <= 0 else (1.0 / ppl_score)
-            try:
-                gm_score = float((app_bin * sim_score * inv_ppl) ** (1 / 3)) if app_bin > 0 and sim_score > 0 and inv_ppl > 0 else 0.0
-            except Exception:
-                gm_score = 0.0
-
             app_bin_all = 1.0 if flipped_all else 0.0
-            inv_ppl_all = 0.0 if not np.isfinite(ppl_score_all) or ppl_score_all <= 0 else (1.0 / ppl_score_all)
-            try:
-                gm_score_all = float((app_bin_all * sim_score_all * inv_ppl_all) ** (1 / 3)) if app_bin_all > 0 and sim_score_all > 0 and inv_ppl_all > 0 else 0.0
-            except Exception:
-                gm_score_all = 0.0
 
             # Global scorer metrics (perfect edits)
             global_ss_binary, global_ss_score = 0.0, 0.0
@@ -530,14 +519,12 @@ def main(
                     "Sim": sim_score,
                     "NES": nes_score,
                     "PPL": ppl_score,
-                    "GM": gm_score,
                 },
                 "metrics_all": {
                     "App": app_bin_all,
                     "Sim": sim_score_all,
                     "NES": nes_score_all,
                     "PPL": ppl_score_all,
-                    "GM": gm_score_all,
                 },
                 "global_scores": {
                     "semantic_similarity_binary": global_ss_binary,

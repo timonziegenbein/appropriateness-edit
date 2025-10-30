@@ -1076,15 +1076,29 @@
           const stats = ds.datasetStats;
           const totalEx = stats.totalExamples || 0;
 
+          const app = totalEx > 0 && stats.metricsSums ? stats.metricsSums.App / totalEx : null;
+          const sim = totalEx > 0 && stats.metricsSums ? stats.metricsSums.Sim / totalEx : null;
+          const nes = totalEx > 0 && stats.metricsSums ? stats.metricsSums.NES / totalEx : null;
+          const ppl = totalEx > 0 && stats.metricsSums ? stats.metricsSums.PPL / totalEx : null;
+
+          // Calculate GM from aggregated values: (App × Sim × (1/PPL))^(1/3)
+          let gm = null;
+          if (app !== null && sim !== null && ppl !== null && app > 0 && sim > 0 && ppl > 0 && isFinite(ppl)) {
+            const invPpl = 1.0 / ppl;
+            gm = Math.pow(app * sim * invPpl, 1/3);
+          } else {
+            gm = 0.0;
+          }
+
           const row = {
             idx: idx,
             fileName: ds.fileName,
             examples: totalEx,
-            app: totalEx > 0 && stats.metricsSums ? stats.metricsSums.App / totalEx : null,
-            sim: totalEx > 0 && stats.metricsSums ? stats.metricsSums.Sim / totalEx : null,
-            nes: totalEx > 0 && stats.metricsSums ? stats.metricsSums.NES / totalEx : null,
-            ppl: totalEx > 0 && stats.metricsSums ? stats.metricsSums.PPL / totalEx : null,
-            gm: totalEx > 0 && stats.metricsSums ? stats.metricsSums.GM / totalEx : null
+            app: app,
+            sim: sim,
+            nes: nes,
+            ppl: ppl,
+            gm: gm
           };
           argMetricsPerfectData.push(row);
 
@@ -1144,15 +1158,29 @@
         const stats = ds.datasetStats;
         const totalEx = stats.totalExamples || 0;
 
+        const app = totalEx > 0 ? stats.metricsAllSums.App / totalEx : null;
+        const sim = totalEx > 0 ? stats.metricsAllSums.Sim / totalEx : null;
+        const nes = totalEx > 0 ? stats.metricsAllSums.NES / totalEx : null;
+        const ppl = totalEx > 0 ? stats.metricsAllSums.PPL / totalEx : null;
+
+        // Calculate GM from aggregated values: (App × Sim × (1/PPL))^(1/3)
+        let gm = null;
+        if (app !== null && sim !== null && ppl !== null && app > 0 && sim > 0 && ppl > 0 && isFinite(ppl)) {
+          const invPpl = 1.0 / ppl;
+          gm = Math.pow(app * sim * invPpl, 1/3);
+        } else {
+          gm = 0.0;
+        }
+
         const row = {
           idx: idx,
           fileName: ds.fileName,
           examples: totalEx,
-          app: totalEx > 0 ? stats.metricsAllSums.App / totalEx : null,
-          sim: totalEx > 0 ? stats.metricsAllSums.Sim / totalEx : null,
-          nes: totalEx > 0 ? stats.metricsAllSums.NES / totalEx : null,
-          ppl: totalEx > 0 ? stats.metricsAllSums.PPL / totalEx : null,
-          gm: totalEx > 0 ? stats.metricsAllSums.GM / totalEx : null
+          app: app,
+          sim: sim,
+          nes: nes,
+          ppl: ppl,
+          gm: gm
         };
         argMetricsData.push(row);
 
