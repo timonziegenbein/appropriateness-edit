@@ -816,10 +816,9 @@
           globalScoresAvg[key] = stats.globalScoresSums[key] / totalEx;
         }
 
-        // Convert to binary values (0 or 1) using 0.5 threshold
+        // Values are already binary from evaluate_edits.py
         const dataPoints = sortedGlobalScoreLabels.map(label => {
-          const value = globalScoresAvg[label] || 0;
-          return value >= 0.5 ? 1 : 0;
+          return globalScoresAvg[label] || 0;
         });
 
         const color = colorPalette[index % colorPalette.length];
@@ -888,8 +887,8 @@
             const avg = stats.globalScoresSums && stats.globalScoresSums[label] !== undefined
               ? stats.globalScoresSums[label] / totalEx
               : null;
-            // Convert to binary: 1 if >= 0.5, 0 otherwise
-            row.scores[label] = avg !== null ? (avg >= 0.5 ? 1 : 0) : null;
+            // Values are already binary from evaluate_edits.py
+            row.scores[label] = avg;
             if (row.scores[label] !== null && row.scores[label] > globalScoresPerfectMaxValues[label]) {
               globalScoresPerfectMaxValues[label] = row.scores[label];
             }
@@ -914,7 +913,7 @@
           sortedGlobalScoreLabels.forEach(label => {
             const value = row.scores[label];
             const isBest = value !== null && value === globalScoresPerfectMaxValues[label];
-            globalScoresPerfectHtml += `<td style="padding: 8px; text-align: right; ${isBest ? boldStyle : ''}">${value !== null ? value.toFixed(0) : '--'}</td>`;
+            globalScoresPerfectHtml += `<td style="padding: 8px; text-align: right; ${isBest ? boldStyle : ''}">${value !== null ? value.toFixed(2) : '--'}</td>`;
           });
           globalScoresPerfectHtml += '</tr>';
         });
@@ -945,10 +944,9 @@
           globalScoresAvgAll[key] = stats.globalScoresAllSums[key] / totalEx;
         }
 
-        // Convert to binary values (0 or 1) using 0.5 threshold
+        // Values are already binary from evaluate_edits.py
         const dataPointsAll = sortedGlobalScoreLabelsAll.map(label => {
-          const value = globalScoresAvgAll[label] || 0;
-          return value >= 0.5 ? 1 : 0;
+          return globalScoresAvgAll[label] || 0;
         });
 
         const color = colorPalette[index % colorPalette.length];
@@ -1017,8 +1015,8 @@
             const avg = stats.globalScoresAllSums && stats.globalScoresAllSums[label] !== undefined
               ? stats.globalScoresAllSums[label] / totalEx
               : null;
-            // Convert to binary: 1 if >= 0.5, 0 otherwise
-            row.scores[label] = avg !== null ? (avg >= 0.5 ? 1 : 0) : null;
+            // Values are already binary from evaluate_edits.py
+            row.scores[label] = avg;
             if (row.scores[label] !== null && row.scores[label] > globalScoresAllMaxValues[label]) {
               globalScoresAllMaxValues[label] = row.scores[label];
             }
@@ -1043,7 +1041,7 @@
           sortedGlobalScoreLabelsAll.forEach(label => {
             const value = row.scores[label];
             const isBest = value !== null && value === globalScoresAllMaxValues[label];
-            globalScoresAllHtml += `<td style="padding: 8px; text-align: right; ${isBest ? boldStyle : ''}">${value !== null ? value.toFixed(0) : '--'}</td>`;
+            globalScoresAllHtml += `<td style="padding: 8px; text-align: right; ${isBest ? boldStyle : ''}">${value !== null ? value.toFixed(2) : '--'}</td>`;
           });
           globalScoresAllHtml += '</tr>';
         });
