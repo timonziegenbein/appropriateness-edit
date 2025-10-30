@@ -780,7 +780,7 @@
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-              title: { display: true, text: 'Average Reward Scores (All Edits)' },
+              title: { display: true, text: 'Local Scores (All Edits)' },
               legend: { position: 'top', display: datasets.length > 1 },
               tooltip: {
                 callbacks: {
@@ -865,6 +865,66 @@
         });
       }
 
+      // --- 4B. RENDER GLOBAL SCORES TABLE (perfect edits) ---
+      if (globalScoresTablePerfectDiv && datasets.length > 0 && sortedGlobalScoreLabels.length > 0) {
+        const globalScoresPerfectData = [];
+        const globalScoresPerfectMaxValues = {};
+        sortedGlobalScoreLabels.forEach(label => {
+          globalScoresPerfectMaxValues[label] = -Infinity;
+        });
+
+        datasets.forEach((ds, idx) => {
+          const stats = ds.datasetStats;
+          const totalEx = stats.totalExamples || 0;
+          if (totalEx === 0) return;
+
+          const row = {
+            idx: idx,
+            fileName: ds.fileName,
+            scores: {}
+          };
+
+          sortedGlobalScoreLabels.forEach(label => {
+            const avg = stats.globalScoresSums && stats.globalScoresSums[label] !== undefined
+              ? stats.globalScoresSums[label] / totalEx
+              : null;
+            // Convert to binary: 1 if >= 0.5, 0 otherwise
+            row.scores[label] = avg !== null ? (avg >= 0.5 ? 1 : 0) : null;
+            if (row.scores[label] !== null && row.scores[label] > globalScoresPerfectMaxValues[label]) {
+              globalScoresPerfectMaxValues[label] = row.scores[label];
+            }
+          });
+
+          globalScoresPerfectData.push(row);
+        });
+
+        let globalScoresPerfectHtml = '<div style="overflow-x: auto;"><table style="width: 100%; border-collapse: collapse; font-size: 14px;">';
+        globalScoresPerfectHtml += '<thead><tr style="border-bottom: 2px solid #e3e8f1;">';
+        globalScoresPerfectHtml += '<th style="text-align: left; padding: 8px; font-weight: 600;">Dataset</th>';
+        sortedGlobalScoreLabels.forEach(label => {
+          globalScoresPerfectHtml += `<th style="text-align: right; padding: 8px; font-weight: 600;">${escapeHtml(label)}</th>`;
+        });
+        globalScoresPerfectHtml += '</tr></thead><tbody>';
+
+        const boldStyle = 'font-weight: 700;';
+        globalScoresPerfectData.forEach((row) => {
+          const rowStyle = row.idx === currentDatasetIndex ? 'background-color: #f0f7ff;' : '';
+          globalScoresPerfectHtml += `<tr style="${rowStyle} border-bottom: 1px solid #f0f0f0;">`;
+          globalScoresPerfectHtml += `<td style="padding: 8px;">${escapeHtml(row.fileName)}</td>`;
+          sortedGlobalScoreLabels.forEach(label => {
+            const value = row.scores[label];
+            const isBest = value !== null && value === globalScoresPerfectMaxValues[label];
+            globalScoresPerfectHtml += `<td style="padding: 8px; text-align: right; ${isBest ? boldStyle : ''}">${value !== null ? value.toFixed(0) : '--'}</td>`;
+          });
+          globalScoresPerfectHtml += '</tr>';
+        });
+
+        globalScoresPerfectHtml += '</tbody></table></div>';
+        globalScoresTablePerfectDiv.innerHTML = globalScoresPerfectHtml;
+      } else if (globalScoresTablePerfectDiv) {
+        globalScoresTablePerfectDiv.innerHTML = '<div style="color: #999; font-style: italic;">No global scores data available.</div>';
+      }
+
       // --- 5. RENDER GLOBAL SCORES CHART (all valid edits) ---
       const allGlobalScoreLabelsAll = new Set();
       datasets.forEach(ds => {
@@ -932,6 +992,134 @@
             }
           }
         });
+      }
+
+      // --- 5B. RENDER GLOBAL SCORES TABLE (all valid edits) ---
+      if (globalScoresTableAllDiv && datasets.length > 0 && sortedGlobalScoreLabelsAll.length > 0) {
+        const globalScoresAllData = [];
+        const globalScoresAllMaxValues = {};
+        sortedGlobalScoreLabelsAll.forEach(label => {
+          globalScoresAllMaxValues[label] = -Infinity;
+        });
+
+        datasets.forEach((ds, idx) => {
+          const stats = ds.datasetStats;
+          const totalEx = stats.totalExamples || 0;
+          if (totalEx === 0) return;
+
+          const row = {
+            idx: idx,
+            fileName: ds.fileName,
+            scores: {}
+          };
+
+          sortedGlobalScoreLabelsAll.forEach(label => {
+            const avg = stats.globalScoresAllSums && stats.globalScoresAllSums[label] !== undefined
+              ? stats.globalScoresAllSums[label] / totalEx
+              : null;
+            // Convert to binary: 1 if >= 0.5, 0 otherwise
+            row.scores[label] = avg !== null ? (avg >= 0.5 ? 1 : 0) : null;
+            if (row.scores[label] !== null && row.scores[label] > globalScoresAllMaxValues[label]) {
+              globalScoresAllMaxValues[label] = row.scores[label];
+            }
+          });
+
+          globalScoresAllData.push(row);
+        });
+
+        let globalScoresAllHtml = '<div style="overflow-x: auto;"><table style="width: 100%; border-collapse: collapse; font-size: 14px;">';
+        globalScoresAllHtml += '<thead><tr style="border-bottom: 2px solid #e3e8f1;">';
+        globalScoresAllHtml += '<th style="text-align: left; padding: 8px; font-weight: 600;">Dataset</th>';
+        sortedGlobalScoreLabelsAll.forEach(label => {
+          globalScoresAllHtml += `<th style="text-align: right; padding: 8px; font-weight: 600;">${escapeHtml(label)}</th>`;
+        });
+        globalScoresAllHtml += '</tr></thead><tbody>';
+
+        const boldStyle = 'font-weight: 700;';
+        globalScoresAllData.forEach((row) => {
+          const rowStyle = row.idx === currentDatasetIndex ? 'background-color: #f0f7ff;' : '';
+          globalScoresAllHtml += `<tr style="${rowStyle} border-bottom: 1px solid #f0f0f0;">`;
+          globalScoresAllHtml += `<td style="padding: 8px;">${escapeHtml(row.fileName)}</td>`;
+          sortedGlobalScoreLabelsAll.forEach(label => {
+            const value = row.scores[label];
+            const isBest = value !== null && value === globalScoresAllMaxValues[label];
+            globalScoresAllHtml += `<td style="padding: 8px; text-align: right; ${isBest ? boldStyle : ''}">${value !== null ? value.toFixed(0) : '--'}</td>`;
+          });
+          globalScoresAllHtml += '</tr>';
+        });
+
+        globalScoresAllHtml += '</tbody></table></div>';
+        globalScoresTableAllDiv.innerHTML = globalScoresAllHtml;
+      } else if (globalScoresTableAllDiv) {
+        globalScoresTableAllDiv.innerHTML = '<div style="color: #999; font-style: italic;">No global scores data available.</div>';
+      }
+
+      // --- 6A. RENDER ARGUMENT-LEVEL METRICS TABLE - PERFECT EDITS (all datasets) ---
+      if (argumentMetricsPerfectDiv && datasets.length > 0) {
+        const argMetricsPerfectData = [];
+        const argPerfectMaxValues = {
+          examples: -Infinity,
+          app: -Infinity,
+          sim: -Infinity,
+          nes: -Infinity,
+          ppl: Infinity, // Lower is better for PPL
+          gm: -Infinity
+        };
+
+        datasets.forEach((ds, idx) => {
+          const stats = ds.datasetStats;
+          const totalEx = stats.totalExamples || 0;
+
+          const row = {
+            idx: idx,
+            fileName: ds.fileName,
+            examples: totalEx,
+            app: totalEx > 0 && stats.metricsSums ? stats.metricsSums.App / totalEx : null,
+            sim: totalEx > 0 && stats.metricsSums ? stats.metricsSums.Sim / totalEx : null,
+            nes: totalEx > 0 && stats.metricsSums ? stats.metricsSums.NES / totalEx : null,
+            ppl: totalEx > 0 && stats.metricsSums ? stats.metricsSums.PPL / totalEx : null,
+            gm: totalEx > 0 && stats.metricsSums ? stats.metricsSums.GM / totalEx : null
+          };
+          argMetricsPerfectData.push(row);
+
+          // Track max values (note: for PPL, lower is better, so we track min)
+          if (row.examples > argPerfectMaxValues.examples) argPerfectMaxValues.examples = row.examples;
+          if (row.app !== null && row.app > argPerfectMaxValues.app) argPerfectMaxValues.app = row.app;
+          if (row.sim !== null && row.sim > argPerfectMaxValues.sim) argPerfectMaxValues.sim = row.sim;
+          if (row.nes !== null && row.nes > argPerfectMaxValues.nes) argPerfectMaxValues.nes = row.nes;
+          if (row.ppl !== null && row.ppl < argPerfectMaxValues.ppl) argPerfectMaxValues.ppl = row.ppl;
+          if (row.gm !== null && row.gm > argPerfectMaxValues.gm) argPerfectMaxValues.gm = row.gm;
+        });
+
+        let argMetricsPerfectHtml = '<div style="overflow-x: auto;"><table style="width: 100%; border-collapse: collapse; font-size: 14px;">';
+        argMetricsPerfectHtml += '<thead><tr style="border-bottom: 2px solid #e3e8f1;">';
+        argMetricsPerfectHtml += '<th style="text-align: left; padding: 8px; font-weight: 600;">Dataset</th>';
+        argMetricsPerfectHtml += '<th style="text-align: right; padding: 8px; font-weight: 600;">Examples</th>';
+        argMetricsPerfectHtml += '<th style="text-align: right; padding: 8px; font-weight: 600;">App</th>';
+        argMetricsPerfectHtml += '<th style="text-align: right; padding: 8px; font-weight: 600;">Sim</th>';
+        argMetricsPerfectHtml += '<th style="text-align: right; padding: 8px; font-weight: 600;">NES</th>';
+        argMetricsPerfectHtml += '<th style="text-align: right; padding: 8px; font-weight: 600;">PPL</th>';
+        argMetricsPerfectHtml += '<th style="text-align: right; padding: 8px; font-weight: 600;">GM</th>';
+        argMetricsPerfectHtml += '</tr></thead><tbody>';
+
+        const boldStyle = 'font-weight: 700;';
+        argMetricsPerfectData.forEach((row) => {
+          const rowStyle = row.idx === currentDatasetIndex ? 'background-color: #f0f7ff;' : '';
+          argMetricsPerfectHtml += `<tr style="${rowStyle} border-bottom: 1px solid #f0f0f0;">`;
+          argMetricsPerfectHtml += `<td style="padding: 8px;">${escapeHtml(row.fileName)}</td>`;
+          argMetricsPerfectHtml += `<td style="padding: 8px; text-align: right; ${row.examples === argPerfectMaxValues.examples ? boldStyle : ''}">${row.examples}</td>`;
+          argMetricsPerfectHtml += `<td style="padding: 8px; text-align: right; ${row.app === argPerfectMaxValues.app ? boldStyle : ''}">${row.app !== null ? row.app.toFixed(2) : '--'}</td>`;
+          argMetricsPerfectHtml += `<td style="padding: 8px; text-align: right; ${row.sim === argPerfectMaxValues.sim ? boldStyle : ''}">${row.sim !== null ? row.sim.toFixed(2) : '--'}</td>`;
+          argMetricsPerfectHtml += `<td style="padding: 8px; text-align: right; ${row.nes === argPerfectMaxValues.nes ? boldStyle : ''}">${row.nes !== null ? row.nes.toFixed(2) : '--'}</td>`;
+          argMetricsPerfectHtml += `<td style="padding: 8px; text-align: right; ${row.ppl === argPerfectMaxValues.ppl ? boldStyle : ''}">${row.ppl !== null ? row.ppl.toFixed(2) : '--'}</td>`;
+          argMetricsPerfectHtml += `<td style="padding: 8px; text-align: right; ${row.gm === argPerfectMaxValues.gm ? boldStyle : ''}">${row.gm !== null ? row.gm.toFixed(2) : '--'}</td>`;
+          argMetricsPerfectHtml += '</tr>';
+        });
+
+        argMetricsPerfectHtml += '</tbody></table></div>';
+        argumentMetricsPerfectDiv.innerHTML = argMetricsPerfectHtml;
+      } else if (argumentMetricsPerfectDiv) {
+        argumentMetricsPerfectDiv.innerHTML = '<div style="color: #999; font-style: italic;">No argument-level metrics data available.</div>';
       }
 
       // --- 6. RENDER ARGUMENT-LEVEL METRICS TABLE (all datasets) ---
