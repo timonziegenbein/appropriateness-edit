@@ -1,3 +1,15 @@
+"""
+DEPRECATED: This script combines edit generation and evaluation in one step.
+
+For new experiments, use the two-step workflow:
+1. generate_edits.py - Generate edits once (costly)
+2. evaluate_edits.py - Evaluate with different configs (fast)
+
+See models/EVALUATION_WORKFLOW.md for details.
+
+This script is kept for backward compatibility.
+"""
+
 import os
 import sys
 import time

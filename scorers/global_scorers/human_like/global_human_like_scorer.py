@@ -198,8 +198,7 @@ class GlobalHumanLikeScorer:
             tuple: (binary_score, perplexity) where binary_score is 1.0 if perplexity <= threshold, 0.0 otherwise
         """
         if not edits:
-            # No edits is perfectly human-like
-            return 1.0, 0.0
+            return 0.0, self.threshold + 0.1
 
         try:
             # Generate document-level edit sequence
