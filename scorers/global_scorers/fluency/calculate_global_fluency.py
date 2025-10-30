@@ -1,48 +1,28 @@
 import pandas as pd
 import numpy as np
-import torch
 import sys
 import os
 import json
 import random
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
+import weave
+from weave.scorers import WeaveFluencyScorerV1
 
 # Set seeds for reproducibility
-torch.manual_seed(0)
 np.random.seed(0)
 random.seed(0)
-if torch.cuda.is_available():
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
-
-def load_fluency_model(device, model_name="tcapelle/fluency-scorer"):
-    """Load the fluency model from HuggingFace."""
-    print(f"Loading fluency model from HuggingFace: {model_name}")
-
-    # Load tokenizer and model from HuggingFace
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForSequenceClassification.from_pretrained(model_name)
-
-    model.to(device)
-    model.eval()
-
-    print("Fluency model loaded successfully")
-    return model, tokenizer
 
 
 def calculate_global_fluency_scores():
     """
     Calculates fluency scores for entire documents (before vs after all edits).
     This is the document-level version of the local fluency calculation.
+    Uses Weave's built-in WeaveFluencyScorerV1.
     """
-    # Device setup
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Using device: {device}")
-
-    # Load model (same as local scorer)
-    model, tokenizer = load_fluency_model(device)
+    print("Initializing Weave fluency scorer...")
+    # Explicitly set device to "cpu" to avoid flash attention issues
+    scorer = WeaveFluencyScorerV1(device="cpu")
 
     results = []
 
@@ -62,28 +42,14 @@ def calculate_global_fluency_scores():
                 if before_revision == after_revision:
                     continue
 
-                # Tokenize the full documents (same format as local scorer)
-                inputs = tokenizer(
-                    before_revision,
-                    after_revision,
-                    return_tensors="pt",
-                    truncation=True,
-                    max_length=512,  # May truncate very long documents
-                    padding=True
-                ).to(device)
+                # Use Weave's fluency scorer on the edited text
+                result = scorer.score(output=after_revision)
 
-                # Run inference
-                with torch.no_grad():
-                    outputs = model(**inputs)
-                    logits = outputs.logits
-
-                    # Get probabilities using softmax
-                    probs = torch.softmax(logits, dim=-1)
-                    predicted_class = torch.argmax(logits, dim=-1).item()
-                    confidence = probs[0][predicted_class].item()
-
-                # Binary score: 1 if fluent (class 1), 0 if non-fluent (class 0)
-                binary_score = float(predicted_class)
+                # Convert Weave's result to our expected format
+                binary_score = 1.0 if result.passed else 0.0
+                # Extract fluency score from metadata
+                confidence = result.metadata.get('score', binary_score)
+                predicted_class = 1 if result.passed else 0
 
                 # Count edits if available
                 num_edits = len(data.get('edit_actions', []))
@@ -144,10 +110,10 @@ def calculate_global_fluency_scores():
         print(f"  P95: {np.percentile(confidence_scores, 95):.6f}")
         print(f"  P99: {np.percentile(confidence_scores, 99):.6f}")
 
-        # For fluency, the model already outputs binary predictions
-        # The threshold is inherent in the model (0.5 probability threshold)
-        print(f"\nNOTE: The fluency model already outputs binary predictions (0 or 1).")
-        print(f"The model uses an inherent threshold of 0.5 probability.")
+        # For fluency, Weave's scorer already outputs binary predictions
+        # The threshold is handled internally by WeaveFluencyScorerV1
+        print(f"\nNOTE: Weave's WeaveFluencyScorerV1 already outputs binary predictions (0 or 1).")
+        print(f"The scorer handles thresholding internally.")
         print(f"No additional threshold needed for this scorer.")
 
         # Analyze fluent documents only

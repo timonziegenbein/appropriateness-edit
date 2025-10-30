@@ -14,6 +14,10 @@ Usage:
     # Evaluate with specific scorers disabled (ablation study)
     python models/evaluate_edits.py --input_jsonl <input_file.jsonl> --output_jsonl <output_file.jsonl> \
         --disable_human_like --disable_fluency
+
+    # Enable Weave tracing for monitoring calculations
+    python models/evaluate_edits.py --input_jsonl <input_file.jsonl> --output_jsonl <output_file.jsonl> \
+        --weave_project username/project-name
 """
 
 import os
@@ -35,6 +39,7 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 from bert_score import BERTScorer
 from transformers import AutoModelForCausalLM, AutoTokenizer
+import weave
 
 from scorers.local_scorers.fluency.fluency_scorer import FluencyScorer
 from scorers.appropriateness.appropriateness_scorer import AppropriatenessScorer
@@ -73,6 +78,7 @@ _ppl_tokenizer.pad_token = _ppl_tokenizer.eos_token
 _PPL_MAX_TOKENS = 1024
 
 
+@weave.op()
 def calculate_text_perplexity(text: str) -> Optional[float]:
     """Calculate perplexity of a text using GPT-2."""
     if not isinstance(text, str) or len(text.strip()) == 0:
@@ -122,6 +128,7 @@ def _normalized_edit_similarity_words(before: str, after: str) -> float:
 # -----------------------------
 # Reward computation per edit
 # -----------------------------
+@weave.op()
 def score_edit(
     original_argument: str,
     edit: Dict[str, Any],
@@ -158,8 +165,9 @@ def score_edit(
         # Semantic similarity
         if semantic_similarity_scorer:
             try:
+                context = original_sentence_context if original_sentence_context is not None else original_argument
                 semantic_similarity, ss_score = semantic_similarity_scorer.calculate_semantic_similarity(
-                    original_argument, inappropriate_part, rewritten_part
+                    context, inappropriate_part, rewritten_part
                 )
                 logger.info(f"Semantic similarity: binary={semantic_similarity}, score={ss_score}")
             except Exception as e:
@@ -258,6 +266,7 @@ def score_edit(
     }
 
 
+@weave.op()
 def main(
     input_jsonl: str,
     output_jsonl: str,
@@ -265,8 +274,14 @@ def main(
     disable_fluency: bool = False,
     disable_human_like: bool = False,
     disable_appropriateness: bool = False,
+    weave_project: str = None,
 ):
     """Evaluate edits from input JSONL and save scored results to output JSONL."""
+    # Initialize weave if project name is provided
+    if weave_project:
+        weave.init(weave_project)
+        logger.info(f"Initialized Weave with project: {weave_project}")
+
     os.makedirs(os.path.dirname(output_jsonl), exist_ok=True)
 
     logger.info(f"Starting evaluation. Input: {input_jsonl}, Output: {output_jsonl}")
@@ -584,6 +599,7 @@ if __name__ == "__main__":
     parser.add_argument("--disable_fluency", action="store_true", help="Disable fluency scorer.")
     parser.add_argument("--disable_human_like", action="store_true", help="Disable human-like scorer.")
     parser.add_argument("--disable_appropriateness", action="store_true", help="Disable appropriateness scorer.")
+    parser.add_argument("--weave_project", type=str, default=None, help="Weave project name for tracing (e.g., 'username/project-name'). If not provided, Weave tracing is disabled.")
 
     args = parser.parse_args()
 
@@ -594,4 +610,5 @@ if __name__ == "__main__":
         disable_fluency=args.disable_fluency,
         disable_human_like=args.disable_human_like,
         disable_appropriateness=args.disable_appropriateness,
+        weave_project=args.weave_project,
     )

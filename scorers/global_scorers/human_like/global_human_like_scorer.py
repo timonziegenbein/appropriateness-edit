@@ -74,6 +74,7 @@ class GlobalHumanLikeScorer:
         human_like_tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
         return human_like_model, human_like_tokenizer
 
+    @weave.op()
     def _calculate_perplexity_for_sequence(self, sequence):
         """Calculate perplexity for an edit operation sequence."""
         logger.debug("Calculating perplexity for sequence:")
@@ -102,6 +103,7 @@ class GlobalHumanLikeScorer:
             logger.debug(f"  Loss: {loss.item()}, Perplexity: {perplexity.item()}")
             return perplexity.item()
 
+    @weave.op()
     def _generate_document_edit_sequence(self, original_text: str, edits: List[Dict]):
         """
         Generate a document-level edit sequence from all edits.
