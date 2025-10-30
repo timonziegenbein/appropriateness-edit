@@ -805,6 +805,9 @@
       });
       const sortedGlobalScoreLabels = Array.from(allGlobalScoreLabels).sort();
 
+      // For charts, filter to only show binary dimensions
+      const sortedGlobalScoreLabelsChart = sortedGlobalScoreLabels.filter(label => label.includes('binary'));
+
       const globalScoresChartDatasets = [];
       datasets.forEach((ds, index) => {
         const stats = ds.datasetStats;
@@ -817,7 +820,8 @@
         }
 
         // Use aggregated values directly (already binary at per-example level)
-        const dataPoints = sortedGlobalScoreLabels.map(label => {
+        // Only include binary dimensions in the chart
+        const dataPoints = sortedGlobalScoreLabelsChart.map(label => {
           return globalScoresAvg[label] || 0;
         });
 
@@ -838,11 +842,11 @@
       if (globalScoresChart) {
         globalScoresChart.destroy();
       }
-      if (sortedGlobalScoreLabels.length > 0) {
+      if (sortedGlobalScoreLabelsChart.length > 0) {
         const globalScoresCtx = document.getElementById('dataset-global-scores-chart').getContext('2d');
         globalScoresChart = new Chart(globalScoresCtx, {
           type: 'radar',
-          data: { labels: sortedGlobalScoreLabels, datasets: globalScoresChartDatasets },
+          data: { labels: sortedGlobalScoreLabelsChart, datasets: globalScoresChartDatasets },
           options: {
             responsive: true,
             maintainAspectRatio: false,
@@ -933,6 +937,9 @@
       });
       const sortedGlobalScoreLabelsAll = Array.from(allGlobalScoreLabelsAll).sort();
 
+      // For charts, filter to only show binary dimensions
+      const sortedGlobalScoreLabelsAllChart = sortedGlobalScoreLabelsAll.filter(label => label.includes('binary'));
+
       const globalScoresAllChartDatasets = [];
       datasets.forEach((ds, index) => {
         const stats = ds.datasetStats;
@@ -945,7 +952,8 @@
         }
 
         // Use aggregated values directly (already binary at per-example level)
-        const dataPointsAll = sortedGlobalScoreLabelsAll.map(label => {
+        // Only include binary dimensions in the chart
+        const dataPointsAll = sortedGlobalScoreLabelsAllChart.map(label => {
           return globalScoresAvgAll[label] || 0;
         });
 
@@ -966,11 +974,11 @@
       if (globalScoresAllChart) {
         globalScoresAllChart.destroy();
       }
-      if (sortedGlobalScoreLabelsAll.length > 0) {
+      if (sortedGlobalScoreLabelsAllChart.length > 0) {
         const globalScoresAllCtx = document.getElementById('dataset-global-scores-all-chart').getContext('2d');
         globalScoresAllChart = new Chart(globalScoresAllCtx, {
           type: 'radar',
-          data: { labels: sortedGlobalScoreLabelsAll, datasets: globalScoresAllChartDatasets },
+          data: { labels: sortedGlobalScoreLabelsAllChart, datasets: globalScoresAllChartDatasets },
           options: {
             responsive: true,
             maintainAspectRatio: false,

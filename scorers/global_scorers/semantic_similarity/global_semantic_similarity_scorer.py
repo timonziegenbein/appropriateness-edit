@@ -19,7 +19,7 @@ class GlobalSemanticSimilarityScorer:
     appropriate for document-level evaluation.
     """
 
-    def __init__(self, device, threshold=0.384170):
+    def __init__(self, device, threshold=0.652266):
         """
         Initialize the global semantic similarity scorer.
 
