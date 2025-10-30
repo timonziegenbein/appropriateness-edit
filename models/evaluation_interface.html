@@ -816,7 +816,7 @@
           globalScoresAvg[key] = stats.globalScoresSums[key] / totalEx;
         }
 
-        // Values are already binary from evaluate_edits.py
+        // Use aggregated values directly (already binary at per-example level)
         const dataPoints = sortedGlobalScoreLabels.map(label => {
           return globalScoresAvg[label] || 0;
         });
@@ -944,7 +944,7 @@
           globalScoresAvgAll[key] = stats.globalScoresAllSums[key] / totalEx;
         }
 
-        // Values are already binary from evaluate_edits.py
+        // Use aggregated values directly (already binary at per-example level)
         const dataPointsAll = sortedGlobalScoreLabelsAll.map(label => {
           return globalScoresAvgAll[label] || 0;
         });
